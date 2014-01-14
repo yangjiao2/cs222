@@ -13,8 +13,8 @@ using namespace std;
 // Record ID
 typedef struct
 {
-  unsigned pageNum;
-  unsigned slotNum;
+    unsigned pageNum;
+    unsigned slotNum;
 } RID;
 
 
@@ -31,18 +31,18 @@ struct Attribute {
 
 // Comparison Operator (NOT needed for part 1 of the project)
 typedef enum { EQ_OP = 0,  // =
-           LT_OP,      // <
-           GT_OP,      // >
-           LE_OP,      // <=
-           GE_OP,      // >=
-           NE_OP,      // !=
-           NO_OP       // no condition
-} CompOp;
+               LT_OP,      // <
+               GT_OP,      // >
+               LE_OP,      // <=
+               GE_OP,      // >=
+               NE_OP,      // !=
+               NO_OP       // no condition
+             } CompOp;
 
 
 
 /****************************************************************************
-The scan iterator is NOT required to be implemented for part 1 of the project 
+The scan iterator is NOT required to be implemented for part 1 of the project
 *****************************************************************************/
 
 # define RBFM_EOF (-1)  // end of a scan operator
@@ -59,78 +59,82 @@ The scan iterator is NOT required to be implemented for part 1 of the project
 
 class RBFM_ScanIterator {
 public:
-  RBFM_ScanIterator() {};
-  ~RBFM_ScanIterator() {};
+    RBFM_ScanIterator() {};
+    ~RBFM_ScanIterator() {};
 
-  // "data" follows the same format as RecordBasedFileManager::insertRecord()
-  RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
-  RC close() { return -1; };
+    // "data" follows the same format as RecordBasedFileManager::insertRecord()
+    RC getNextRecord(RID &rid, void *data) {
+        return RBFM_EOF;
+    };
+    RC close() {
+        return -1;
+    };
 };
 
 
 class RecordBasedFileManager
 {
 public:
-  static RecordBasedFileManager* instance();
+    static RecordBasedFileManager* instance();
 
-  RC createFile(const string &fileName);
-  
-  RC destroyFile(const string &fileName);
-  
-  RC openFile(const string &fileName, FileHandle &fileHandle);
-  
-  RC closeFile(FileHandle &fileHandle);
+    RC createFile(const string &fileName);
 
-  //  Format of the data passed into the function is the following:
-  //  1) data is a concatenation of values of the attributes
-  //  2) For int and real: use 4 bytes to store the value;
-  //     For varchar: use 4 bytes to store the length of characters, then store the actual characters.
-  //  !!!The same format is used for updateRecord(), the returned data of readRecord(), and readAttribute()
-  RC insertRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
+    RC destroyFile(const string &fileName);
 
-  RC readRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
-  
-  // This method will be mainly used for debugging/testing
-  RC printRecord(const vector<Attribute> &recordDescriptor, const void *data);
+    RC openFile(const string &fileName, FileHandle &fileHandle);
 
-/**************************************************************************************************************************************************************
-***************************************************************************************************************************************************************
-IMPORTANT, PLEASE READ: All methods below this comment (other than the constructor and destructor) are NOT required to be implemented for part 1 of the project
-***************************************************************************************************************************************************************
-***************************************************************************************************************************************************************/
-  RC deleteRecords(const FileHandle &fileHandle);
+    RC closeFile(FileHandle &fileHandle);
 
-  RC deleteRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid);
+    //  Format of the data passed into the function is the following:
+    //  1) data is a concatenation of values of the attributes
+    //  2) For int and real: use 4 bytes to store the value;
+    //     For varchar: use 4 bytes to store the length of characters, then store the actual characters.
+    //  !!!The same format is used for updateRecord(), the returned data of readRecord(), and readAttribute()
+    RC insertRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
 
-  // Assume the rid does not change after update
-  RC updateRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid);
+    RC readRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
 
-  RC readAttribute(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string attributeName, void *data);
+    // This method will be mainly used for debugging/testing
+    RC printRecord(const vector<Attribute> &recordDescriptor, const void *data);
 
-  RC reorganizePage(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const unsigned pageNumber);
+    /**************************************************************************************************************************************************************
+    ***************************************************************************************************************************************************************
+    IMPORTANT, PLEASE READ: All methods below this comment (other than the constructor and destructor) are NOT required to be implemented for part 1 of the project
+    ***************************************************************************************************************************************************************
+    ***************************************************************************************************************************************************************/
+    RC deleteRecords(const FileHandle &fileHandle);
 
-  // scan returns an iterator to allow the caller to go through the results one by one. 
-  RC scan(const FileHandle &fileHandle,
-      const vector<Attribute> &recordDescriptor,
-      const string &conditionAttribute,
-      const CompOp compOp,                  // comparision type such as "<" and "="
-      const void *value,                    // used in the comparison
-      const vector<string> &attributeNames, // a list of projected attributes
-      RBFM_ScanIterator &rbfm_ScanIterator);
+    RC deleteRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid);
+
+    // Assume the rid does not change after update
+    RC updateRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid);
+
+    RC readAttribute(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string attributeName, void *data);
+
+    RC reorganizePage(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const unsigned pageNumber);
+
+    // scan returns an iterator to allow the caller to go through the results one by one.
+    RC scan(const FileHandle &fileHandle,
+            const vector<Attribute> &recordDescriptor,
+            const string &conditionAttribute,
+            const CompOp compOp,                  // comparision type such as "<" and "="
+            const void *value,                    // used in the comparison
+            const vector<string> &attributeNames, // a list of projected attributes
+            RBFM_ScanIterator &rbfm_ScanIterator);
 
 
 // Extra credit for part 2 of the project, please ignore for part 1 of the project
 public:
 
-  RC reorganizeFile(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor);
+    RC reorganizeFile(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor);
 
 
 protected:
-  RecordBasedFileManager();
-  ~RecordBasedFileManager();
+    RecordBasedFileManager();
+    ~RecordBasedFileManager();
 
 private:
-  static RecordBasedFileManager *_rbf_manager;
+    static RecordBasedFileManager *_rbf_manager;
 };
 
 #endif
