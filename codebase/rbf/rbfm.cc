@@ -13,6 +13,7 @@ RecordBasedFileManager* RecordBasedFileManager::instance()
 
 RecordBasedFileManager::RecordBasedFileManager()
 {
+	pfm = PagedFileManager::instance();
 }
 
 RecordBasedFileManager::~RecordBasedFileManager()
@@ -20,19 +21,19 @@ RecordBasedFileManager::~RecordBasedFileManager()
 }
 
 RC RecordBasedFileManager::createFile(const string &fileName) {
-    return -1;
+	return pfm->createFile(fileName.c_str());
 }
 
 RC RecordBasedFileManager::destroyFile(const string &fileName) {
-    return -1;
+	return pfm->destroyFile(fileName.c_str());
 }
 
 RC RecordBasedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
-    return -1;
+	return pfm->openFile(fileName.c_str(), fileHandle);
 }
 
 RC RecordBasedFileManager::closeFile(FileHandle &fileHandle) {
-    return -1;
+	return pfm->closeFile(fileHandle);
 }
 
 RC RecordBasedFileManager::insertRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid) {

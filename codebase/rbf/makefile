@@ -23,4 +23,4 @@ $(CODEROOT)/rbf/librbf.a:
 
 .PHONY: clean
 clean:
-	-rm rbftest *.a *.o *~
+	-rm -rf rbftest *.a *.o *~
