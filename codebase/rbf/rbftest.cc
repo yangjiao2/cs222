@@ -227,7 +227,9 @@ int RBFTest_3(PagedFileManager *pfm)
 
     // Open the file "test_1"
     FileHandle fileHandle;
+
     rc = pfm->openFile(fileName.c_str(), fileHandle);
+	fileHandle._fh_file->seekg(0, fstream::end);
     assert(rc == success);
 
     // Get the number of pages in the test file
@@ -261,6 +263,7 @@ int RBFTest_4(PagedFileManager *pfm)
     FileHandle fileHandle;
     rc = pfm->openFile(fileName.c_str(), fileHandle);
     assert(rc == success);
+
 
     // Append the first page
     void *data = malloc(PAGE_SIZE);
@@ -361,6 +364,7 @@ int RBFTest_6(PagedFileManager *pfm)
     void *buffer = malloc(PAGE_SIZE);
     rc = fileHandle.readPage(0, buffer);
     assert(rc == success);
+
 
     // Check the integrity
     rc = memcmp(data, buffer, PAGE_SIZE);

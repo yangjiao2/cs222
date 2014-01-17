@@ -37,10 +37,8 @@ RC PagedFileManager::createFile(const char *fileName)
 {
 	if (isFileExit(fileName))
 		return -1;
-	fstream f;
-	f.open(fileName);
-	if (!f.good())
-		return -1;
+	fstream f(fileName, fstream::out);
+	f.close();
 	return 0;
 }
 
@@ -53,15 +51,16 @@ RC PagedFileManager::destroyFile(const char *fileName)
 	return ret;
 }
 
-
 RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
 {
 	if (!isFileExit(fileName))
 		return -1;
 	if (fileHandle._fh_file != NULL)
 		return -1;
-	fstream f(fileName);
-	fileHandle._fh_file = &f;
+	//should not use stack variable and then assign addresss to _fh_file.
+	//becase of the stack variable scope
+	fileHandle._fh_file = new fstream(fileName,fstream::in | fstream::out);
+		//	fstream::binary|fstream::in|fstream::out|fstream::app);
 	fileHandle._fh_name = fileName;
 	string fn(fileName);
 	if (_pf_open_count.find(fn) == _pf_open_count.end())
@@ -110,28 +109,29 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 {
 	_fh_file->seekg(pageNum * PAGE_SIZE);
 	_fh_file->read((char *)data, PAGE_SIZE);
-	return -1;
+	return 0;
 }
 
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
 	_fh_file->seekp(pageNum * PAGE_SIZE);
 	_fh_file->write((char *)data, PAGE_SIZE);
-	return -1;
+	return 0;
 }
 
-
+//seekp(fstream::end); should not use this!
+//seekp(0, fstream::end); instread. otherwise would write 2 more bytes!
 RC FileHandle::appendPage(const void *data)
 {
-	_fh_file->seekp(ios::end);
-	_fh_file->write((char *)data, PAGE_SIZE);
-	return -1;
+	unsigned n = getNumberOfPages();
+	writePage(n, data);
+	return 0;
 }
 
 
 unsigned FileHandle::getNumberOfPages()
 {
-	_fh_file->seekg(ios::end);
+	_fh_file->seekg(0, fstream::end);
 	return _fh_file->tellg() / PAGE_SIZE;
 }
 
