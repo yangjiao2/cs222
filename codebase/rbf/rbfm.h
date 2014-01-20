@@ -4,6 +4,8 @@
 
 #include <string>
 #include <vector>
+#include <sstream>
+#include <cstring>
 
 #include "../rbf/pfm.h"
 
@@ -76,6 +78,8 @@ class RecordBasedFileManager
 {
 public:
     static RecordBasedFileManager* instance();
+    
+    static int getAttrsLength(vector<Attribute> atrs);
 
     RC createFile(const string &fileName);
 
@@ -90,9 +94,9 @@ public:
     //  2) For int and real: use 4 bytes to store the value;
     //     For varchar: use 4 bytes to store the length of characters, then store the actual characters.
     //  !!!The same format is used for updateRecord(), the returned data of readRecord(), and readAttribute()
-    RC insertRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
+    RC insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
 
-    RC readRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
+    RC readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
 
     // This method will be mainly used for debugging/testing
     RC printRecord(const vector<Attribute> &recordDescriptor, const void *data);
@@ -102,19 +106,19 @@ public:
     IMPORTANT, PLEASE READ: All methods below this comment (other than the constructor and destructor) are NOT required to be implemented for part 1 of the project
     ***************************************************************************************************************************************************************
     ***************************************************************************************************************************************************************/
-    RC deleteRecords(const FileHandle &fileHandle);
+    RC deleteRecords(FileHandle &fileHandle);
 
-    RC deleteRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid);
+    RC deleteRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid);
 
     // Assume the rid does not change after update
-    RC updateRecord(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid);
+    RC updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid);
 
-    RC readAttribute(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string attributeName, void *data);
+    RC readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string attributeName, void *data);
 
-    RC reorganizePage(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const unsigned pageNumber);
+    RC reorganizePage(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const unsigned pageNumber);
 
     // scan returns an iterator to allow the caller to go through the results one by one.
-    RC scan(const FileHandle &fileHandle,
+    RC scan(FileHandle &fileHandle,
             const vector<Attribute> &recordDescriptor,
             const string &conditionAttribute,
             const CompOp compOp,                  // comparision type such as "<" and "="
@@ -126,7 +130,7 @@ public:
 // Extra credit for part 2 of the project, please ignore for part 1 of the project
 public:
 
-    RC reorganizeFile(const FileHandle &fileHandle, const vector<Attribute> &recordDescriptor);
+    RC reorganizeFile(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor);
 
 
 protected:
@@ -137,5 +141,6 @@ private:
     static RecordBasedFileManager *_rbf_manager;
 	PagedFileManager *pfm;
 };
+
 
 #endif

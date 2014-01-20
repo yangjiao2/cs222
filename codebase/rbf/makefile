@@ -6,10 +6,12 @@ all: librbf.a rbftest
 # lib file dependencies
 librbf.a: librbf.a(pfm.o)  # and possibly other .o files
 librbf.a: librbf.a(rbfm.o)
+librbf.a: librbf.a(adt.o)
 
 # c file dependencies
 pfm.o: pfm.h
 rbfm.o: rbfm.h
+adt.o: adt.cpp adt.h
 
 rbftest.o: pfm.h rbfm.h
 
