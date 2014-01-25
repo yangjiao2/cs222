@@ -21,7 +21,7 @@ typedef struct
 
 
 // Attribute
-typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;
+typedef enum { TypeInt = 0, TypeReal, TypeVarChar, TypeNone } AttrType;
 
 typedef unsigned AttrLength;
 
@@ -29,7 +29,11 @@ struct Attribute {
     string   name;     // attribute name
     AttrType type;     // attribute type
     AttrLength length; // attribute length
+    Attribute(){}
+    Attribute(string _name, AttrType _type, AttrLength _len):
+    name(_name), type(_type), length(_len){}
 };
+
 
 // Comparison Operator (NOT needed for part 1 of the project)
 typedef enum { EQ_OP = 0,  // =
@@ -41,6 +45,29 @@ typedef enum { EQ_OP = 0,  // =
                NO_OP       // no condition
              } CompOp;
 
+
+class AttrValue{
+public:
+    AttrType _type;
+    int _len;
+    string _sv;
+    int _iv;
+    float _fv;
+    AttrValue(): _len(0), _sv(""), _iv(0), _fv(0){} //intialize to same value, only different field value matter
+    int readFromData(AttrType type, char *data); //return length of the content
+    int writeToData(char *data); //return length of content
+    static bool compareValue(AttrValue v, AttrValue cmp, CompOp op);
+    void printSelf(void);
+};
+
+inline bool operator==(const AttrValue& lhs, const AttrValue& rhs){ return lhs._fv == rhs._fv &&
+    lhs._iv == rhs._iv && lhs._fv == rhs._fv;}
+inline bool operator!=(const AttrValue& lhs, const AttrValue& rhs){return !operator==(lhs,rhs);}
+inline bool operator< (const AttrValue& lhs, const AttrValue& rhs){return lhs._fv < rhs._fv ||
+    lhs._iv < rhs._iv || lhs._sv < rhs._sv;}
+inline bool operator> (const AttrValue& lhs, const AttrValue& rhs){return  operator< (rhs,lhs);}
+inline bool operator<=(const AttrValue& lhs, const AttrValue& rhs){return !operator> (lhs,rhs);}
+inline bool operator>=(const AttrValue& lhs, const AttrValue& rhs){return !operator< (lhs,rhs);}
 
 
 /****************************************************************************
@@ -60,22 +87,31 @@ The scan iterator is NOT required to be implemented for part 1 of the project
 
 
 class RBFM_ScanIterator {
+    friend class RecordBasedFileManager;
 public:
-    RBFM_ScanIterator() {};
-    ~RBFM_ScanIterator() {};
+    RBFM_ScanIterator() {}
+    ~RBFM_ScanIterator() {}
 
     // "data" follows the same format as RecordBasedFileManager::insertRecord()
-    RC getNextRecord(RID &rid, void *data) {
-        return RBFM_EOF;
-    };
+    RC getNextRecord(RID &rid, void *data);
     RC close() {
         return -1;
-    };
+    }
+    AttrType getAttrType(string name);
+private:
+    RID _rid;
+    FileHandle _fh;
+    vector<Attribute> _descriptor;
+    vector<string> _projected;
+    CompOp _opr;
+    string _condAttr;
+    char *_value;
 };
 
 
 class RecordBasedFileManager
 {
+    friend class RBFM_ScanIterator;
 public:
     static RecordBasedFileManager* instance();
     
@@ -125,6 +161,12 @@ public:
             const void *value,                    // used in the comparison
             const vector<string> &attributeNames, // a list of projected attributes
             RBFM_ScanIterator &rbfm_ScanIterator);
+    
+private:
+    RC getNextRecord(RBFM_ScanIterator &rs, void *data);
+    RC meetRequirement(string v, string cmp, CompOp op);
+    RC meetRequirement(int v, int cmp, CompOp op);
+    RC meetRequirement(float v, float cmp, CompOp op);
 
 
 // Extra credit for part 2 of the project, please ignore for part 1 of the project

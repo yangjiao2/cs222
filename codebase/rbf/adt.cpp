@@ -41,6 +41,64 @@ int PageDirectory::firstPageWithFreelen(FileHandle& fh, int len){
     return -1;
 }
 
+int PageDirectory::nextRecordPageID(FileHandle &fh, int pageid){
+    int pgentry = -1;
+    if (pageid == 0)
+        while (get_next() != 0) {
+            moveToNext(fh);
+            if (get_pgnum() != 0)
+                return get_pgid(0);
+        }
+    //locate
+    while (1) {
+        for (int i = 0; i < get_pgnum(); i++)
+            if (get_pgid(i) == pageid) {
+                pgentry = i;
+                break;
+            }
+        if (pgentry != -1)
+            break;
+        if (get_next() == 0)
+            return -1;
+        moveToNext(fh);
+    }
+    if (pgentry < get_pgnum() - 1)
+        return get_pgid(pgentry + 1);
+    while (get_next() != 0) {
+        moveToNext(fh);
+        if (get_pgnum() != 0)
+            return get_pgid(0);
+    }
+    return -1;
+}
+
+//TODO: refactoring
+int PageDirectory::nextRecord(FileHandle &fh, RID &rid){
+    char buffer[PAGE_SIZE];
+    int pgid = rid.pageNum, slotid = -1;
+    RecordPage rp;
+    if (rid.pageNum != 0) {
+        fh.readPage(rid.pageNum, buffer);
+        rp = RecordPage(buffer);
+        if ((slotid = rp.nextRecord(rid.slotNum + 1)) != -1) {
+            rid.slotNum = slotid;
+            return 0;
+        }
+    }
+    while (1) {
+        if ((pgid = nextRecordPageID(fh, pgid)) == -1)
+            return -1;
+        fh.readPage(pgid, buffer);
+        rp= RecordPage(buffer);
+        if ((slotid = rp.nextRecord(0)) != -1) {
+            rid.pageNum = pgid;
+            rid.slotNum = slotid;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 int PageDirectory::allocRecordPage(FileHandle &fh){
     int allocated = -1;
     while (get_pgnum() == PageDirectory::MaximunEntryNum() &&
@@ -76,6 +134,13 @@ int RecordPage::getFreelen(void){
 
 RecordHeader RecordPage::getRecordHeaderAt(int index){
     return RecordHeader(data + get_offset(index));
+}
+
+int RecordPage::nextRecord(int start_from_slot){
+    for (int i = start_from_slot; i < get_rcdnum(); i++)
+        if (get_offset(i) != -1)
+            return i;
+    return -1;
 }
 
 
@@ -119,29 +184,34 @@ RecordHeader RecordPage::allocRecordHeader(int len, int& slotID){
 }
 
 
-int RecordHeader::writeHeader(vector<Attribute> recordDescriptor){
-    int fld = (int)recordDescriptor.size();
-    set_fieldnum(fld);
-    int fldpos = UNIT_SIZE;
-    for (int i = 0; i < fld; i++){
-        set_fieldOffset(i, fldpos);
-        fldpos += recordDescriptor[i].length;
-    }
-    return 0;
-}
-
 int RecordHeader::writeRecord(vector<Attribute> recordDescriptor, char *bytes){
-    writeHeader(recordDescriptor);
-    memcpy(data + UNIT_SIZE * (1 + get_fieldnum()), bytes,
+    int fld = (int)recordDescriptor.size(), vlen = 0, offset = 0;
+    set_fieldnum(fld);
+    int base = UNIT_SIZE * (2 + fld);//fld + 1 offset in the header
+    for (int i = 0; i < fld; i++){
+        set_fieldOffset(i, offset + base);
+        if (recordDescriptor[i].type == TypeVarChar) {
+            memcpy(&vlen, data + offset, sizeof(int));
+            offset += sizeof(int) + vlen;
+        }
+        else
+            offset += recordDescriptor[i].length;
+    }
+    set_fieldOffset(fld, offset + base);//last offset points to the end of record
+    memcpy(data + UNIT_SIZE * (2 + get_fieldnum()), bytes,
            RecordHeader::getRecordContentLength(recordDescriptor));
     return 0;
 }
 
 
 char *RecordHeader::getContentPointer(void){
-    return data + UNIT_SIZE * (1 + get_fieldnum());
+    return data + UNIT_SIZE * (2 + get_fieldnum());
 }
 
+//index start from 0
+char *RecordHeader::getAttributePointer(int index){
+    return data + get_fieldOffset(index);
+}
 
 
 //finally finds memcpy...

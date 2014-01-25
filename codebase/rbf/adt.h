@@ -40,6 +40,10 @@ public:
     int allocRecordPage(FileHandle &fh);           //return allocated pgnum
     static int MaximunEntryNum(void);
     int set_pgfree_by_id(int pageID, int newlen);
+    
+    int nextRecordPageID(FileHandle &fh, int pageid);
+    int nextRecord(FileHandle &fh, RID &rid);
+    
 };
 
 
@@ -54,6 +58,8 @@ public:
     int getFreelen(void);
     RecordHeader getRecordHeaderAt(int index); //setting returning rh's data
     RecordHeader allocRecordHeader(int len, int& slotID);  //alloc recordHeader by len
+    int nextRecord(int start_from_slot);
+
 };
 
 class RecordHeader{
@@ -63,9 +69,9 @@ public:
     ACCESS_FIELD_METHODS(fieldnum)
     ACCESS_ENTRY_METHODS(fieldOffset)
     
-    int writeHeader(vector<Attribute> recordDescriptor);
     int writeRecord(vector<Attribute> recordDescriptor, char *bytes);
     char *getContentPointer(void);
+    char *getAttributePointer(int index);
 
     //record's length, including header
     static int getRecordLength(vector<Attribute> descriptor);

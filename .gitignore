@@ -4,3 +4,9 @@ rbftest
 temp.*
 temp/
 cs222.xcodeproj/
+codebase/rm/attributes
+codebase/rm/catalog
+codebase/rm/rmtest
+codebase/rm/rmtest_extra
+codebase/rm/librm.a
+
