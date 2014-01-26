@@ -54,12 +54,17 @@ public:
     ACCESS_FIELD_METHODS(rcdnum)
     ACCESS_FIELD_METHODS(freeptr) //offset of freeSpace starting from beginning of page
     ACCESS_ENTRY_METHODS(offset)
+    //rcdlen = 0 means it was empty, rcdlen < 0, means it's a timbstone.
+    //then forwarding addr (pageid, slotid) = (-rcdlen, offset)
     ACCESS_ENTRY_METHODS(rcdlen)
     int getFreelen(void);
     RecordHeader getRecordHeaderAt(int index); //setting returning rh's data
     RecordHeader allocRecordHeader(int len, int& slotID);  //alloc recordHeader by len
     int nextRecord(int start_from_slot);
-
+    
+    void removeSlot(int index);
+    bool isEmptyAt(int index);
+    bool isTombStone(int index);
 };
 
 class RecordHeader{
@@ -74,8 +79,8 @@ public:
     char *getAttributePointer(int index);
 
     //record's length, including header
-    static int getRecordLength(vector<Attribute> descriptor);
-    static int getRecordContentLength(vector<Attribute> descriptor);
+    static int getRecordLength(vector<Attribute> descriptor, char *data);
+    static int getRecordContentLength(vector<Attribute> descriptor, char *data);
     //TODO: add get/set field method, not required in project1
 };
 

@@ -162,6 +162,8 @@ public:
             const vector<string> &attributeNames, // a list of projected attributes
             RBFM_ScanIterator &rbfm_ScanIterator);
     
+    RID locateRecordRID(FileHandle &fh, const RID &rid);
+    
 private:
     RC getNextRecord(RBFM_ScanIterator &rs, void *data);
     RC meetRequirement(string v, string cmp, CompOp op);

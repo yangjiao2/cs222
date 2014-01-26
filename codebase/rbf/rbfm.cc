@@ -59,7 +59,7 @@ void AttrValue::printSelf(){
         default:
             break;
     }
-    cout<<" | "<<endl;
+    cout<<" | ";
 }
 
 bool AttrValue::compareValue(AttrValue v, AttrValue cmp, CompOp op){
@@ -97,7 +97,7 @@ RecordBasedFileManager* RecordBasedFileManager::instance()
 {
     if(!_rbf_manager)
         _rbf_manager = new RecordBasedFileManager();
-
+    
     return _rbf_manager;
 }
 
@@ -111,12 +111,12 @@ RecordBasedFileManager::~RecordBasedFileManager()
 }
 
 RC RecordBasedFileManager::scan(FileHandle &fileHandle,
-        const vector<Attribute> &recordDescriptor,
-        const string &conditionAttribute,
-        const CompOp compOp,                  // comparision type such as "<" and "="
-        const void *value,                    // used in the comparison
-        const vector<string> &attributeNames, // a list of projected attributes
-        RBFM_ScanIterator &rbfm_ScanIterator){
+                                const vector<Attribute> &recordDescriptor,
+                                const string &conditionAttribute,
+                                const CompOp compOp,                  // comparision type such as "<" and "="
+                                const void *value,                    // used in the comparison
+                                const vector<string> &attributeNames, // a list of projected attributes
+                                RBFM_ScanIterator &rbfm_ScanIterator){
     rbfm_ScanIterator._condAttr = conditionAttribute;
     rbfm_ScanIterator._descriptor = recordDescriptor;
     rbfm_ScanIterator._opr = compOp;
@@ -185,7 +185,7 @@ RC RecordBasedFileManager::closeFile(FileHandle &fileHandle) {
 RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle,
                                         const vector<Attribute> &recordDescriptor,
                                         const void *data, RID &rid) {
-    int length = RecordHeader::getRecordLength(recordDescriptor);
+    int length = RecordHeader::getRecordLength(recordDescriptor, (char *)data);
     int pgid, slotID;
     char direct_buff[PAGE_SIZE], rp_buff[PAGE_SIZE];
     
@@ -194,14 +194,10 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle,
     pgid = pdt.firstPageWithFreelen(fileHandle, length);
     if (pgid == -1)
         pgid = pdt.allocRecordPage(fileHandle);
-    if (pgid == -1){
-        cout<<"fail to allocate an availiable page"<<endl;
-        return -1;
-    }
+    assert(pgid != -1);
     fileHandle.readPage(pgid, rp_buff);
     RecordPage rp(rp_buff);
     RecordHeader rh = rp.allocRecordHeader(length, slotID);
-
     
     rh.writeRecord(recordDescriptor, (char *)data);
     pdt.set_pgfree_by_id(pgid, rp.getFreelen());
@@ -212,15 +208,33 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle,
     return 0;
 }
 
+RID RecordBasedFileManager::locateRecordRID(FileHandle &fh, const RID &rid){
+    RID tid = rid;
+    char rp_buffer[PAGE_SIZE];
+    while (1) {
+        fh.readPage(tid.pageNum, rp_buffer);
+        RecordPage rp(rp_buffer);
+        assert(!rp.isEmptyAt(tid.slotNum - 1));
+        if (rp.isTombStone(tid.slotNum - 1)) {
+            cout<<"TombStone"<<endl;
+            tid.pageNum = - rp.get_rcdlen(tid.slotNum - 1);
+            tid.slotNum = rp.get_offset(tid.slotNum - 1);
+            continue;
+        }
+        return tid;
+    }
+}
+
+
 RC RecordBasedFileManager::readRecord(FileHandle &fileHandle,
                                       const vector<Attribute> &recordDescriptor,
                                       const RID &rid, void *data) {
     char rp_buffer[PAGE_SIZE], *content = NULL;
-    fileHandle.readPage(rid.pageNum, rp_buffer);
+    RID tid = locateRecordRID(fileHandle, rid);
+    fileHandle.readPage(tid.pageNum, rp_buffer);
     RecordPage rp(rp_buffer);
-    RecordHeader rh = rp.getRecordHeaderAt(rid.slotNum - 1);
-    content = rh.getContentPointer();
-    memcpy(data, content, RecordHeader::getRecordContentLength(recordDescriptor));
+    content = rp.getRecordHeaderAt(tid.slotNum - 1).getContentPointer();
+    memcpy(data, content, RecordHeader::getRecordContentLength(recordDescriptor, content));
     return 0;
 }
 
@@ -248,11 +262,11 @@ RC RecordBasedFileManager::deleteRecords(FileHandle &fileHandle){
 }
 
 RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor,
-                const RID &rid){
+                                        const RID &rid){
     char buffer[PAGE_SIZE];
     fileHandle.readPage(rid.pageNum, buffer);
     RecordPage rp(buffer);
-    rp.set_offset(rid.slotNum - 1, -1);
+    rp.removeSlot(rid.slotNum - 1);
     return 0;
 }
 
@@ -261,18 +275,31 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 // TODO: if records is growing too long, should move it to other place, leave tombstone
 // this would affect readRecord's code, keep forwarding until find a none tombstone.
 RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor,
-                const void *data, const RID &rid){
+                                        const void *data, const RID &rid){
     char buffer[PAGE_SIZE];
-    fileHandle.readPage(rid.pageNum, buffer);
-    RecordHeader rh = RecordPage(buffer).getRecordHeaderAt(rid.slotNum - 1);
+    RID tid = locateRecordRID(fileHandle, rid), nid;
+    readRecord(fileHandle, recordDescriptor, rid, buffer);
+    int len1 = RecordHeader::getRecordContentLength(recordDescriptor, buffer);
+    int len2 = RecordHeader::getRecordContentLength(recordDescriptor, (char *)data);
+    fileHandle.readPage(tid.pageNum, buffer);
+    RecordPage rp(buffer);
+    if (len1 < len2) {
+        insertRecord(fileHandle, recordDescriptor, data, nid);
+        //tid => nid
+        rp.set_rcdlen(tid.slotNum - 1, -nid.pageNum);
+        rp.set_offset(tid.slotNum - 1, nid.slotNum);
+        return 0;
+    }
+
+    RecordHeader rh = rp.getRecordHeaderAt(tid.slotNum - 1);
     rh.writeRecord(recordDescriptor, (char *)data);
-    fileHandle.writePage(rid.pageNum, buffer);
+    fileHandle.writePage(tid.pageNum, buffer);
     return 0;
 }
 
 
 RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor,
-                 const RID &rid, const string attributeName, void *data){
+                                         const RID &rid, const string attributeName, void *data){
     char buffer[PAGE_SIZE];
     readRecord(fileHandle, recordDescriptor, rid, buffer);
     int offset = 0;
@@ -295,8 +322,9 @@ RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<A
     RecordPage rp(buffer);
     int newFreePointer = 0;
     for (int i = 0; i < rp.get_rcdnum(); i++)
-        if ((offset = rp.get_offset(i)) != -1){
+        if (!rp.isEmptyAt(i) && !rp.isTombStone(i)){
             //safe to use memove, even may overlap
+            offset = rp.get_offset(i);
             memmove(rp.data + newFreePointer, rp.data + offset, rp.get_rcdlen(i));
             rp.set_offset(i, newFreePointer);
             newFreePointer += rp.get_rcdlen(i);

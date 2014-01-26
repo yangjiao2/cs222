@@ -72,7 +72,7 @@ int PageDirectory::nextRecordPageID(FileHandle &fh, int pageid){
     return -1;
 }
 
-//TODO: refactoring
+
 int PageDirectory::nextRecord(FileHandle &fh, RID &rid){
     char buffer[PAGE_SIZE];
     int pgid = rid.pageNum, slotid = -1;
@@ -124,11 +124,22 @@ int PageDirectory::allocRecordPage(FileHandle &fh){
 }
 
 
+bool RecordPage::isTombStone(int index){
+    return get_rcdlen(index) < 0;
+}
 
+bool RecordPage::isEmptyAt(int index){
+    return get_rcdlen(index) == 0;
+}
+
+void RecordPage::removeSlot(int index){
+    set_rcdlen(index, 0);
+}
 
 
 int RecordPage::getFreelen(void){
-    return PAGE_SIZE - get_freeptr() - 2 * UNIT_SIZE * (get_rcdnum() + 1);
+    //UNIT_SIZE(2 * record_number + 1 for rcdnum field + 2 for reserve to next insert)
+    return PAGE_SIZE - get_freeptr() - UNIT_SIZE * (2 * get_rcdnum() + 1 + 2);
 }
 
 
@@ -138,30 +149,29 @@ RecordHeader RecordPage::getRecordHeaderAt(int index){
 
 int RecordPage::nextRecord(int start_from_slot){
     for (int i = start_from_slot; i < get_rcdnum(); i++)
-        if (get_offset(i) != -1)
+        if (!isEmptyAt(i) && !isTombStone(i))
             return i;
     return -1;
 }
 
 
-
-int RecordHeader::getRecordLength(vector<Attribute> descriptor){
-    int len = UNIT_SIZE * (int)(1 + descriptor.size()) +
-    RecordHeader::getRecordContentLength(descriptor);
+int RecordHeader::getRecordLength(vector<Attribute> descriptor, char *bytes){
+    int len = UNIT_SIZE * (int)(2 + descriptor.size()) +
+    RecordHeader::getRecordContentLength(descriptor,bytes);
     return len;
 }
 
-int RecordHeader::getRecordContentLength(vector<Attribute> descriptor){
-    int len = 0;
+int RecordHeader::getRecordContentLength(vector<Attribute> descriptor, char *bytes){
+    int offset = 0;
     for (int i = 0; i < (int)descriptor.size(); i++){
-        len += descriptor[i].length;
-        if (descriptor[i].type == TypeVarChar)
-            len += UNIT_SIZE;
+        AttrValue av;
+        offset += av.readFromData(descriptor[i].type, bytes + offset);
     }
-    return len;
+    return offset;
 }
 
 //len = len(RecordHeader + RecordContent)
+//TODO: not enough length checking
 RecordHeader RecordPage::allocRecordHeader(int len, int& slotID){
     slotID = -1;
     if (getFreelen() < len){
@@ -169,7 +179,7 @@ RecordHeader RecordPage::allocRecordHeader(int len, int& slotID){
         return RecordHeader();
     }
     for (int i = 0; i < get_rcdnum(); i++)
-        if (get_offset(i) == -1) {
+        if (isEmptyAt(i)) {
             slotID = i + 1;
             break;
         }
@@ -191,15 +201,16 @@ int RecordHeader::writeRecord(vector<Attribute> recordDescriptor, char *bytes){
     for (int i = 0; i < fld; i++){
         set_fieldOffset(i, offset + base);
         if (recordDescriptor[i].type == TypeVarChar) {
-            memcpy(&vlen, data + offset, sizeof(int));
+            memcpy(&vlen, bytes + offset, sizeof(int));
             offset += sizeof(int) + vlen;
         }
         else
             offset += recordDescriptor[i].length;
     }
     set_fieldOffset(fld, offset + base);//last offset points to the end of record
-    memcpy(data + UNIT_SIZE * (2 + get_fieldnum()), bytes,
-           RecordHeader::getRecordContentLength(recordDescriptor));
+    assert(offset == RecordHeader::getRecordContentLength(recordDescriptor, bytes));
+    memcpy(data + base, bytes,
+           RecordHeader::getRecordContentLength(recordDescriptor, bytes));
     return 0;
 }
 
