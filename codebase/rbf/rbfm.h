@@ -86,6 +86,8 @@ The scan iterator is NOT required to be implemented for part 1 of the project
 //  rbfmScanIterator.close();
 
 
+//TODO: *_value may should have copy, otherwise it's affected by caller's changing of *value
+//not high priority
 class RBFM_ScanIterator {
     friend class RecordBasedFileManager;
 public:
@@ -95,7 +97,8 @@ public:
     // "data" follows the same format as RecordBasedFileManager::insertRecord()
     RC getNextRecord(RID &rid, void *data);
     RC close() {
-        return -1;
+        PagedFileManager *pfm = PagedFileManager::instance();
+        return pfm->closeFile(_fh);
     }
     AttrType getAttrType(string name);
 private:

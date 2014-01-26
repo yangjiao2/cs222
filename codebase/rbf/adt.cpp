@@ -44,10 +44,12 @@ int PageDirectory::firstPageWithFreelen(FileHandle& fh, int len){
 int PageDirectory::nextRecordPageID(FileHandle &fh, int pageid){
     int pgentry = -1;
     if (pageid == 0)
-        while (get_next() != 0) {
-            moveToNext(fh);
+        while (1) {
             if (get_pgnum() != 0)
-                return get_pgid(0);
+                return  get_pgid(0);
+            if (get_next() == 0)
+                return -1;
+            moveToNext(fh);
         }
     //locate
     while (1) {
@@ -80,7 +82,7 @@ int PageDirectory::nextRecord(FileHandle &fh, RID &rid){
     if (rid.pageNum != 0) {
         fh.readPage(rid.pageNum, buffer);
         rp = RecordPage(buffer);
-        if ((slotid = rp.nextRecord(rid.slotNum + 1)) != -1) {
+        if ((slotid = rp.nextRecord(rid.slotNum)) != -1) { // - 1 is current. + 0 is next
             rid.slotNum = slotid;
             return 0;
         }
@@ -150,7 +152,7 @@ RecordHeader RecordPage::getRecordHeaderAt(int index){
 int RecordPage::nextRecord(int start_from_slot){
     for (int i = start_from_slot; i < get_rcdnum(); i++)
         if (!isEmptyAt(i) && !isTombStone(i))
-            return i;
+            return i + 1; //slotid = index + 1
     return -1;
 }
 

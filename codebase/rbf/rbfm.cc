@@ -134,29 +134,32 @@ RC RecordBasedFileManager::getNextRecord(RBFM_ScanIterator &rs, void *data){
     char buffer[PAGE_SIZE], val[PAGE_SIZE];
     fh.readPage(0, buffer);
     PageDirectory pdt(buffer);
+    AttrValue rv, cv;
     while (pdt.nextRecord(fh, rid) != -1) {
-        if (readAttribute(fh, rs._descriptor, rid, rs._condAttr, val) == -1)
-            return -1;
-        AttrType type = rs.getAttrType(rs._condAttr);
-        AttrValue rv, cv;
-        rv.readFromData(type, val);
-        cv.readFromData(type, rs._value);
-        if (AttrValue::compareValue(rv, cv, rs._opr)){
-            rs._rid = rid;
-            for (int i = 0; i < rs._projected.size(); i++) {
-                readAttribute(rs._fh, rs._descriptor, rid, rs._projected[i],
-                              (char *)data + offset);
-                offset += rv.readFromData(rs.getAttrType(rs._projected[i]), (char *)data + offset);
-            }
-            return  0; //retrieve projected
+        if (rs._opr != NO_OP) {
+            if (readAttribute(fh, rs._descriptor, rid, rs._condAttr, val) == -1)
+                return -1;
+            AttrType type = rs.getAttrType(rs._condAttr);
+            rv.readFromData(type, val);
+            cv.readFromData(type, rs._value);
+            if(!AttrValue::compareValue(rv, cv, rs._opr))
+                continue;
         }
+        rs._rid = rid;
+        for (int i = 0; i < rs._projected.size(); i++) {
+            readAttribute(rs._fh, rs._descriptor, rid, rs._projected[i],
+                          (char *)data + offset);
+            offset += rv.readFromData(rs.getAttrType(rs._projected[i]), (char *)data + offset);
+        }
+        return  0;
     }
     return -1;
 }
 
 
 RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
-    return RBFM_EOF;
+    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+    return rbfm->getNextRecord(*this, data);
 }
 
 RC RecordBasedFileManager::createFile(const string &fileName) {
