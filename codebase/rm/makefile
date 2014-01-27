@@ -25,5 +25,5 @@ $(CODEROOT)/rbf/librbf.a:
 
 .PHONY: clean
 clean:
-	-rm rmtest rmtest_extra *.a *.o *~
+	-rm -rf rmtest rmtest_extra *.a *.o *~ attributes catalog
 	$(MAKE) -C $(CODEROOT)/rbf clean

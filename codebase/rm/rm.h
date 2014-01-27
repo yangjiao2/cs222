@@ -7,7 +7,7 @@
 
 #include "../rbf/rbfm.h"
 
-using namespace std;
+
 
 #define RM_CATALOG_NAME "catalog"
 #define RM_ATTRIBUTES_NAME "attributes"
@@ -79,6 +79,7 @@ private:
     
     int prepareCatalogData(string tableName, char *data);
     int prepareAttrData(string tableName, Attribute attr, char *data);
+    void RetrieveMetaInfo(void);
     
     
     
@@ -100,8 +101,9 @@ private:
     RecordBasedFileManager *rbfm;
     FileHandle catalog_fh;
     FileHandle attr_fh;
-    map<string, int> tbname_to_id;//table name to id
-    map<string, vector<Attribute> > tbname_to_desp; //table name to descriptor
+    std::map<string, int> tbname_to_id;//table name to id
+    std::map<int, string> tid_to_tbname; //id to tablename
+    std::map<string, vector<Attribute> > tbname_to_desp; //table name to descriptor
     int _new_tbid;
 };
 

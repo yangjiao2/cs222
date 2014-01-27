@@ -9,7 +9,6 @@
 
 #include "../rbf/pfm.h"
 
-using namespace std;
 
 
 // Record ID

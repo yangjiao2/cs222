@@ -2,13 +2,14 @@
 #include "rm.h"
 #include <cassert>
 
-const string catalog_attr_name[] = {"tableID", "tableName", "fileName"};
+char const *catalog_attr_name[] = {"tableID", "tableName", "fileName"};
 const AttrType catalog_attr_type[] = {TypeInt, TypeVarChar, TypeVarChar};
 const int catalog_attr_len[] = {4, 30, 30};
 
-const string attrs_attr_name[] = {"tableID", "colum_name", "colum_type", "colum_len"};
-const AttrType attrs_attr_type[] = {TypeInt, TypeVarChar, TypeInt, TypeInt};
-const int attrs_attr_len[] = {4, 30, 4, 4};
+char const *attrs_attr_name[] = {"tableID", "colum_name", "colum_type", "colum_len"};
+const AttrType attrs_attr_type[4] = {TypeInt, TypeVarChar, TypeInt, TypeInt};
+const int attrs_attr_len[4] = {4, 30, 4, 4};
+
 
 RelationManager* RelationManager::_rm = 0;
 
@@ -90,25 +91,62 @@ int RelationManager::prepareAttrData(string tableName, Attribute attr, char *dat
     return 0;
 }
 
+//retrieve all meta info for all table, fill in map data structre
+//scan the whole file, set _new_tbid
+void RelationManager::RetrieveMetaInfo(){
+    RBFM_ScanIterator rsi;
+    RID rid;
+    char data[PAGE_SIZE];
+    vector<string> projected;
+    projected.assign(catalog_attr_name, catalog_attr_name + 3);
+    rbfm->scan(catalog_fh, prepareCatalogDescriptor(), "", NO_OP, NULL, projected, rsi);
+    AttrValue av;
+    while (rsi.getNextRecord(rid, data) != -1) {
+        int offset = 0;
+        offset += av.readFromData(TypeInt, data);
+        int tid = av._iv;
+        offset += av.readFromData(TypeVarChar, data + offset);
+        string tname = av._sv;
+        tbname_to_id[tname] = tid;
+        tid_to_tbname[tid] = tname;
+        _new_tbid = max(_new_tbid, tid + 1);
+    }
+    rsi.close();
+    projected.assign(attrs_attr_name, attrs_attr_name + 4);
+    rbfm->scan(attr_fh, prepareAttrDescriptor(), "", NO_OP, NULL, projected, rsi);
+    while (rsi.getNextRecord(rid, data) != -1) {
+        int offset = 0;
+        offset += av.readFromData(TypeInt, data + offset);
+        int tid = av._iv;
+        offset += av.readFromData(TypeVarChar, data + offset);
+        string colname = av._sv;
+        offset += av.readFromData(TypeInt, data + offset);
+        int coltype = av._iv;
+        offset += av.readFromData(TypeInt, data + offset);
+        int collen = av._iv;
+        string tname = tid_to_tbname[tid];
+        Attribute attr(colname, (AttrType)coltype, (AttrLength)collen);
+        vector<Attribute> desp;
+        if (tbname_to_desp.find(tname) != tbname_to_desp.end())
+            desp = tbname_to_desp[tname];
+        desp.push_back(attr);
+        tbname_to_desp[tname] = desp;
+    }
+}
+
 RelationManager::RelationManager()
 {
     rbfm = RecordBasedFileManager::instance();
-    _new_tbid = 0;
-    
-    char data[PAGE_SIZE];
+    _new_tbid = 1;
     int nofiles = 0;
-    RID rid;
-    
     if (-1 == rbfm->openFile(RM_CATALOG_NAME, catalog_fh)){
         rbfm->createFile(RM_CATALOG_NAME);
         rbfm->openFile(RM_CATALOG_NAME, catalog_fh);
-        tbname_to_id[RM_CATALOG_NAME] = _new_tbid++;
         nofiles++;
     }
     if (-1 == rbfm->openFile(RM_ATTRIBUTES_NAME, attr_fh)){
         rbfm->createFile(RM_ATTRIBUTES_NAME);
         rbfm->openFile(RM_ATTRIBUTES_NAME, attr_fh);
-        tbname_to_id[RM_ATTRIBUTES_NAME] = _new_tbid++;
         nofiles++;
     }
     assert(nofiles == 0 || nofiles == 2);
@@ -116,8 +154,8 @@ RelationManager::RelationManager()
         createTable(RM_CATALOG_NAME, prepareCatalogDescriptor());
         createTable(RM_ATTRIBUTES_NAME, prepareAttrDescriptor());
     }
-    //retrieve all meta info for all table, fill in map data structre
-    //scan the whole file, set _new_tbid
+    RetrieveMetaInfo();
+
 }
 
 RelationManager::~RelationManager()
@@ -129,16 +167,19 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 {
     char data[PAGE_SIZE];
     string tb_fn = RM_TABLE_FILENAME(tableName);
-    vector<Attribute> descriptor = prepareCatalogDescriptor();
     RID rid;
-    if (tableName != RM_ATTRIBUTES_NAME && tableName != RM_CATALOG_NAME) {
+    if (tableName != RM_ATTRIBUTES_NAME && tableName != RM_CATALOG_NAME)
         rbfm->createFile(tb_fn);
-    }
-    rbfm->insertRecord(catalog_fh, descriptor, data, rid);
-    descriptor = prepareAttrDescriptor();
+    assert(tbname_to_id.find(tableName) == tbname_to_id.end());
+    tbname_to_id[tableName] = _new_tbid;
+    tbname_to_desp[tableName] = attrs;
+    tid_to_tbname[_new_tbid] = tableName;
+    _new_tbid++;
+    prepareCatalogData(tableName, data);
+    rbfm->insertRecord(catalog_fh, prepareCatalogDescriptor(), data, rid);
     for (int i = 0; i < attrs.size(); i++) {
         prepareAttrData(tableName, attrs[i], data);
-        rbfm->insertRecord(attr_fh, descriptor, data, rid);
+        rbfm->insertRecord(attr_fh, prepareAttrDescriptor(), data, rid);
     }
     return 0;
 }
@@ -150,12 +191,19 @@ RC RelationManager::deleteTable(const string &tableName)
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
-    return -1;
+    if (tbname_to_desp.find(tableName) == tbname_to_desp.end())
+        return -1;
+    attrs = tbname_to_desp[tableName];
+    return 0;
 }
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
-    return -1;
+    assert(tbname_to_desp.find(tableName) != tbname_to_desp.end());
+    FileHandle fh;
+    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    rbfm->insertRecord(fh, tbname_to_desp[tableName], data, rid);
+    return 0;
 }
 
 RC RelationManager::deleteTuples(const string &tableName)
