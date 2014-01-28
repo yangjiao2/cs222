@@ -48,6 +48,7 @@ RC PagedFileManager::destroyFile(const char *fileName)
 	if (!isFileExit(fileName))
 		return -1;
 	int ret = remove(fileName);
+    cout<<"returning value of destroyFile "<<ret<<endl;
 	return ret;
 }
 
@@ -60,7 +61,6 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
 	//should not use stack variable and then assign addresss to _fh_file.
 	//becase of the stack variable scope
 	fileHandle._fh_file = new fstream(fileName,fstream::in | fstream::out);
-		//	fstream::binary|fstream::in|fstream::out|fstream::app);
 	fileHandle._fh_name = fileName;
 	string fn(fileName);
 	if (_pf_open_count.find(fn) == _pf_open_count.end())
@@ -132,7 +132,7 @@ RC FileHandle::appendPage(const void *data)
 unsigned FileHandle::getNumberOfPages()
 {
 	_fh_file->seekg(0, fstream::end);
-	return _fh_file->tellg() / PAGE_SIZE;
+	return (unsigned)_fh_file->tellg() / PAGE_SIZE;
 }
 
 

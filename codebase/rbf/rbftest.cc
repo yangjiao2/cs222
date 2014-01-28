@@ -680,10 +680,12 @@ int RBFTest_10(RecordBasedFileManager *rbfm, vector<RID> &rids, vector<int> &siz
     {
         memset(record, 0, 1000);
         memset(returnedData, 0, 1000);
+        cout<<"pgid "<<rids[i].pageNum<<" slotid "<<rids[i].slotNum<<endl;
         rc = rbfm->readRecord(fileHandle, recordDescriptor, rids[i], returnedData);
         assert(rc == success);
 
-        cout << "Returned Data:" << endl;
+        cout << "Returned Data:" << i + 1 << endl;
+
         rbfm->printRecord(recordDescriptor, returnedData);
 
         int size = 0;
