@@ -32,8 +32,13 @@ public:
     ~RM_ScanIterator() {};
     
     // "data" follows the same format as RelationManager::insertTuple()
-    RC getNextTuple(RID &rid, void *data) { return RM_EOF; };
-    RC close() { return -1; };
+    RC getNextTuple(RID &rid, void *data);
+    RC close(){
+        return _rmsi.close();
+    }
+    friend class RelationManager;
+private:
+    RBFM_ScanIterator _rmsi;
 };
 
 
@@ -71,6 +76,7 @@ public:
             const void *value,                    // used in the comparison
             const vector<string> &attributeNames, // a list of projected attributes
             RM_ScanIterator &rm_ScanIterator);
+    string tid_to_tbname(int tid);
     
     
 private:
@@ -102,7 +108,6 @@ private:
     FileHandle catalog_fh;
     FileHandle attr_fh;
     std::map<string, int> tbname_to_id;//table name to id
-    std::map<int, string> tid_to_tbname; //id to tablename
     std::map<string, vector<Attribute> > tbname_to_desp; //table name to descriptor
     int _new_tbid;
 };

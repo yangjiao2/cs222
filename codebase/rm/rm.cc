@@ -10,6 +10,9 @@ char const *attrs_attr_name[] = {"tableID", "colum_name", "colum_type", "colum_l
 const AttrType attrs_attr_type[4] = {TypeInt, TypeVarChar, TypeInt, TypeInt};
 const int attrs_attr_len[4] = {4, 30, 4, 4};
 
+#define TABLE_EXIST_CHECK(x) \
+if (tbname_to_desp.find(x) == tbname_to_desp.end()) return -1;
+
 
 RelationManager* RelationManager::_rm = 0;
 
@@ -19,6 +22,17 @@ RelationManager* RelationManager::instance()
         _rm = new RelationManager();
     
     return _rm;
+}
+
+string RelationManager::tid_to_tbname(int tid){
+    for (map<string, int>::iterator itr = tbname_to_id.begin() ;
+         itr != tbname_to_id.end(); itr++)
+        if (itr->second == tid){
+            cout<<"tid is "<< tid << " "<<itr->first<<endl;
+            return itr->first;
+        }
+    assert(0);
+    return "";
 }
 
 
@@ -66,7 +80,6 @@ int RelationManager::prepareCatalogData(string tableName, char *data){
 
 int RelationManager::prepareAttrData(string tableName, Attribute attr, char *data){
     assert(tbname_to_id.find(tableName) != tbname_to_id.end());
-    
     int id = tbname_to_id[tableName];
     string column_name = attr.name;
     int column_type = (int)attr.type;
@@ -82,10 +95,10 @@ int RelationManager::prepareAttrData(string tableName, Attribute attr, char *dat
     memcpy(data + offset, column_name.c_str(), len);
     offset += len;
     
-    memcpy(data, &column_type, sizeof(int));
+    memcpy(data + offset, &column_type, sizeof(int));
     offset += sizeof(int);
     
-    memcpy(data, &column_len, sizeof(int));
+    memcpy(data + offset, &column_len, sizeof(int));
     offset += sizeof(int);
     
     return 0;
@@ -108,7 +121,6 @@ void RelationManager::RetrieveMetaInfo(){
         offset += av.readFromData(TypeVarChar, data + offset);
         string tname = av._sv;
         tbname_to_id[tname] = tid;
-        tid_to_tbname[tid] = tname;
         _new_tbid = max(_new_tbid, tid + 1);
     }
     rsi.close();
@@ -124,7 +136,9 @@ void RelationManager::RetrieveMetaInfo(){
         int coltype = av._iv;
         offset += av.readFromData(TypeInt, data + offset);
         int collen = av._iv;
-        string tname = tid_to_tbname[tid];
+        string tname = tid_to_tbname(tid);
+        if (tname == RM_CATALOG_NAME || RM_ATTRIBUTES_NAME)
+            continue;
         Attribute attr(colname, (AttrType)coltype, (AttrLength)collen);
         vector<Attribute> desp;
         if (tbname_to_desp.find(tname) != tbname_to_desp.end())
@@ -155,14 +169,13 @@ RelationManager::RelationManager()
         createTable(RM_ATTRIBUTES_NAME, prepareAttrDescriptor());
     }
     RetrieveMetaInfo();
-
 }
 
 RelationManager::~RelationManager()
 {
 }
 
-
+//TODO: existing table, failure
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
     char data[PAGE_SIZE];
@@ -170,11 +183,8 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     RID rid;
     if (tableName != RM_ATTRIBUTES_NAME && tableName != RM_CATALOG_NAME)
         rbfm->createFile(tb_fn);
-    assert(tbname_to_id.find(tableName) == tbname_to_id.end());
-    tbname_to_id[tableName] = _new_tbid;
+    tbname_to_id[tableName] = _new_tbid++;
     tbname_to_desp[tableName] = attrs;
-    tid_to_tbname[_new_tbid] = tableName;
-    _new_tbid++;
     prepareCatalogData(tableName, data);
     rbfm->insertRecord(catalog_fh, prepareCatalogDescriptor(), data, rid);
     for (int i = 0; i < attrs.size(); i++) {
@@ -184,22 +194,44 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     return 0;
 }
 
+
+//TODO: refectoring, using AttrValue to dump bytes
 RC RelationManager::deleteTable(const string &tableName)
 {
-    return -1;
+    TABLE_EXIST_CHECK(tableName);
+    rbfm->destroyFile(RM_TABLE_FILENAME(tableName));
+    RID rid;
+    RM_ScanIterator rsi;
+    char data[PAGE_SIZE], value[100];
+    int len = (int)tableName.length();
+    vector<string> attrNames(1);
+    attrNames[0] = tableName;
+    memcpy(value, &len, sizeof(int));
+    memcpy(value + sizeof(int), tableName.c_str(), len);
+    scan(RM_CATALOG_NAME, "tableName", EQ_OP, value, attrNames, rsi);
+    rsi.getNextTuple(rid, data);
+    deleteTuple(RM_CATALOG_NAME, rid);
+    attrNames[0] = "tableID";
+    rsi.close();
+    scan(RM_ATTRIBUTES_NAME, "tableID", EQ_OP, &tbname_to_id[tableName], attrNames, rsi);
+    while (-1 != rsi.getNextTuple(rid, data))
+        deleteTuple(RM_ATTRIBUTES_NAME, rid);
+//    tid_to_tbname.erase(tbname_to_id[tableName]);
+    tbname_to_id.erase(tableName);
+    tbname_to_desp.erase(tableName);
+    return 0;
 }
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
-    if (tbname_to_desp.find(tableName) == tbname_to_desp.end())
-        return -1;
+    TABLE_EXIST_CHECK(tableName);
     attrs = tbname_to_desp[tableName];
     return 0;
 }
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
-    assert(tbname_to_desp.find(tableName) != tbname_to_desp.end());
+    TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
     rbfm->insertRecord(fh, tbname_to_desp[tableName], data, rid);
@@ -208,32 +240,53 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 
 RC RelationManager::deleteTuples(const string &tableName)
 {
-    return -1;
+    TABLE_EXIST_CHECK(tableName);
+    FileHandle fh;
+    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    return rbfm->deleteRecords(fh);
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
-    return -1;
+    TABLE_EXIST_CHECK(tableName);
+    FileHandle fh;
+    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    rbfm->deleteRecord(fh, tbname_to_desp[tableName], rid);
+    return 0;
 }
 
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
 {
-    return -1;
+    TABLE_EXIST_CHECK(tableName);
+    FileHandle fh;
+    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    return rbfm->updateRecord(fh, tbname_to_desp[tableName], data, rid);
 }
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
 {
-    return -1;
+    TABLE_EXIST_CHECK(tableName);
+    FileHandle fh;
+    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    return rbfm->readRecord(fh, tbname_to_desp[tableName], rid, data);
 }
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
 {
-    return -1;
+    TABLE_EXIST_CHECK(tableName);
+    FileHandle fh;
+    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    return rbfm->readAttribute(fh, tbname_to_desp[tableName], rid, attributeName, data);
 }
 
 RC RelationManager::reorganizePage(const string &tableName, const unsigned pageNumber)
 {
     return -1;
+}
+
+
+RC RM_ScanIterator::getNextTuple(RID &rid, void *data) {
+    return _rmsi.getNextRecord(rid, data);
 }
 
 RC RelationManager::scan(const string &tableName,
@@ -243,7 +296,12 @@ RC RelationManager::scan(const string &tableName,
                          const vector<string> &attributeNames,
                          RM_ScanIterator &rm_ScanIterator)
 {
-    return -1;
+    TABLE_EXIST_CHECK(tableName);
+    FileHandle fh;
+    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    cout<<"tablename "<<tableName<<" "<<tbname_to_desp[tableName].size()<<endl;
+    return rbfm->scan(fh, tbname_to_desp[tableName], conditionAttribute, compOp, value,
+               attributeNames, rm_ScanIterator._rmsi);
 }
 
 // Extra credit

@@ -43,7 +43,7 @@ public:
     
     int nextRecordPageID(FileHandle &fh, int pageid);
     int nextRecord(FileHandle &fh, RID &rid);
-    
+    int locateRecordPage(Filehandle &fh, int pageid);
 };
 
 

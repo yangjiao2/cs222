@@ -52,6 +52,9 @@ public:
     string _sv;
     int _iv;
     float _fv;
+    AttrValue(int v): _len(sizeof(int)), _sv(""), _iv(v), _fv(0) {}
+    AttrValue(float v): _len(sizeof(int)), _sv(""), _iv(0), _fv(v) {}
+    AttrValue(string v): _len(sizeof(int)), _sv(v), _iv(0), _fv(0) {}
     AttrValue(): _len(0), _sv(""), _iv(0), _fv(0){} //intialize to same value, only different field value matter
     int readFromData(AttrType type, char *data); //return length of the content
     int writeToData(char *data); //return length of content
@@ -59,8 +62,9 @@ public:
     void printSelf(void);
 };
 
-inline bool operator==(const AttrValue& lhs, const AttrValue& rhs){ return lhs._fv == rhs._fv &&
-    lhs._iv == rhs._iv && lhs._fv == rhs._fv;}
+inline bool operator==(const AttrValue& lhs, const AttrValue& rhs){
+    return lhs._fv == rhs._fv &&
+    lhs._iv == rhs._iv && lhs._sv == rhs._sv;}
 inline bool operator!=(const AttrValue& lhs, const AttrValue& rhs){return !operator==(lhs,rhs);}
 inline bool operator< (const AttrValue& lhs, const AttrValue& rhs){return lhs._fv < rhs._fv ||
     lhs._iv < rhs._iv || lhs._sv < rhs._sv;}
@@ -164,7 +168,7 @@ public:
             const vector<string> &attributeNames, // a list of projected attributes
             RBFM_ScanIterator &rbfm_ScanIterator);
     
-    RID locateRecordRID(FileHandle &fh, const RID &rid);
+    RC locateRecordRID(FileHandle &fh, const RID &rid, RID &tid);
     
 private:
     RC getNextRecord(RBFM_ScanIterator &rs, void *data);

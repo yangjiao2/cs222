@@ -535,7 +535,7 @@ void secA_5(const string &tableName, const int nameLength, const string &name, c
     // Test Delete Tuples
     rc = rm->deleteTuples(tableName);
     assert(rc == success);
-    
+
     // Test Read Tuple
     memset((char*)returnedData1, 0, 100);
     rc = rm->readTuple(tableName, rid, returnedData1);
