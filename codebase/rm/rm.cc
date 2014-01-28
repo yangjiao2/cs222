@@ -27,10 +27,8 @@ RelationManager* RelationManager::instance()
 string RelationManager::tid_to_tbname(int tid){
     for (map<string, int>::iterator itr = tbname_to_id.begin() ;
          itr != tbname_to_id.end(); itr++)
-        if (itr->second == tid){
-            cout<<"tid is "<< tid << " "<<itr->first<<endl;
+        if (itr->second == tid)
             return itr->first;
-        }
     assert(0);
     return "";
 }
@@ -137,7 +135,7 @@ void RelationManager::RetrieveMetaInfo(){
         offset += av.readFromData(TypeInt, data + offset);
         int collen = av._iv;
         string tname = tid_to_tbname(tid);
-        if (tname == RM_CATALOG_NAME || RM_ATTRIBUTES_NAME)
+        if (tname == RM_CATALOG_NAME || tname == RM_ATTRIBUTES_NAME)
             continue;
         Attribute attr(colname, (AttrType)coltype, (AttrLength)collen);
         vector<Attribute> desp;
@@ -234,8 +232,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
-    rbfm->insertRecord(fh, tbname_to_desp[tableName], data, rid);
-    return 0;
+    return rbfm->insertRecord(fh, tbname_to_desp[tableName], data, rid);
 }
 
 RC RelationManager::deleteTuples(const string &tableName)
@@ -251,8 +248,7 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
-    rbfm->deleteRecord(fh, tbname_to_desp[tableName], rid);
-    return 0;
+    return rbfm->deleteRecord(fh, tbname_to_desp[tableName], rid);
 }
 
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
@@ -281,7 +277,10 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 
 RC RelationManager::reorganizePage(const string &tableName, const unsigned pageNumber)
 {
-    return -1;
+    TABLE_EXIST_CHECK(tableName);
+    FileHandle fh;
+    rbfm->openFile(tableName, fh);
+    return rbfm->reorganizePage(fh, tbname_to_desp[tableName], pageNumber);
 }
 
 
@@ -299,7 +298,6 @@ RC RelationManager::scan(const string &tableName,
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
-    cout<<"tablename "<<tableName<<" "<<tbname_to_desp[tableName].size()<<endl;
     return rbfm->scan(fh, tbname_to_desp[tableName], conditionAttribute, compOp, value,
                attributeNames, rm_ScanIterator._rmsi);
 }

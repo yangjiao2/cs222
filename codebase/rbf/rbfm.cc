@@ -264,7 +264,6 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
     return 0;
 }
 
-
 //delete all records, just close, destroy, create, reopen file.
 RC RecordBasedFileManager::deleteRecords(FileHandle &fileHandle){
     string name = fileHandle._fh_name;
@@ -285,14 +284,11 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
     fileHandle.readPage(tid.pageNum, buffer);
     RecordPage rp(buffer);
     rp.removeSlot(tid.slotNum - 1);
-    fileHandle.writePage(rid.pageNum, buffer);
+    fileHandle.writePage(tid.pageNum, buffer);
     return 0;
 }
 
-
 // Assume the rid does not change after update
-// TODO: if records is growing too long, should move it to other place, leave tombstone
-// this would affect readRecord's code, keep forwarding until find a none tombstone.
 RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor,
                                         const void *data, const RID &rid){
     char buffer[PAGE_SIZE];
@@ -309,9 +305,9 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
         //tid => nid
         rp.set_rcdlen(tid.slotNum - 1, -nid.pageNum);
         rp.set_offset(tid.slotNum - 1, nid.slotNum);
+        fileHandle.writePage(tid.pageNum, buffer);
         return 0;
     }
-
     RecordHeader rh = rp.getRecordHeaderAt(tid.slotNum - 1);
     rh.writeRecord(recordDescriptor, (char *)data);
     fileHandle.writePage(tid.pageNum, buffer);
@@ -337,7 +333,7 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
 
 RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<Attribute>
                                           &recordDescriptor, const unsigned pageNumber){
-    char buffer[PAGE_SIZE];
+    char buffer[PAGE_SIZE], direct_buff[PAGE_SIZE];
     int offset = 0;
     fileHandle.readPage(pageNumber, buffer);
     RecordPage rp(buffer);
@@ -351,5 +347,10 @@ RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<A
             newFreePointer += rp.get_rcdlen(i);
         }
     rp.set_freeptr(newFreePointer);
+    fileHandle.writePage(pageNumber, buffer);
+    fileHandle.readPage(0, direct_buff);
+    PageDirectory pdt(direct_buff);
+    int entry = pdt.locateRecordPage(fileHandle, pageNumber);
+    pdt.set_pgfreelen(entry, rp.getFreelen());
     return 0;
 }

@@ -41,18 +41,8 @@ int PageDirectory::firstPageWithFreelen(FileHandle& fh, int len){
     return -1;
 }
 
-
-int PageDirectory::nextRecordPageID(FileHandle &fh, int pageid){
+int PageDirectory::locateRecordPage(FileHandle &fh, int pageid){
     int pgentry = -1;
-    if (pageid == 0)
-        while (1) {
-            if (get_pgnum() != 0)
-                return  get_pgid(0);
-            if (get_next() == 0)
-                return -1;
-            moveToNext(fh);
-        }
-    //locate
     while (1) {
         for (int i = 0; i < get_pgnum(); i++)
             if (get_pgid(i) == pageid) {
@@ -65,6 +55,21 @@ int PageDirectory::nextRecordPageID(FileHandle &fh, int pageid){
             return -1;
         moveToNext(fh);
     }
+    return pgentry;
+}
+
+int PageDirectory::nextRecordPageID(FileHandle &fh, int pageid){
+    int pgentry = -1;
+    if (pageid == 0)
+        while (1) {
+            if (get_pgnum() != 0)
+                return  get_pgid(0);
+            if (get_next() == 0)
+                return -1;
+            moveToNext(fh);
+        }
+    if((pgentry = locateRecordPage(fh, pageid)) == -1)
+        return -1;
     if (pgentry < get_pgnum() - 1)
         return get_pgid(pgentry + 1);
     while (get_next() != 0) {
