@@ -8,5 +8,6 @@ codebase/rm/attributes
 codebase/rm/catalog
 codebase/rm/rmtest
 codebase/rm/rmtest_extra
+codebase/rm/rmtest_[1,2]
 codebase/rm/librm.a
 

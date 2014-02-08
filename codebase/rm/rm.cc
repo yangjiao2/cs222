@@ -166,6 +166,8 @@ RelationManager::RelationManager()
         createTable(RM_CATALOG_NAME, prepareCatalogDescriptor());
         createTable(RM_ATTRIBUTES_NAME, prepareAttrDescriptor());
     }
+    tbname_to_desp[RM_CATALOG_NAME] = prepareCatalogDescriptor();
+    tbname_to_desp[RM_ATTRIBUTES_NAME] = prepareAttrDescriptor();
     RetrieveMetaInfo();
 }
 
@@ -173,9 +175,10 @@ RelationManager::~RelationManager()
 {
 }
 
-//TODO: existing table, failure
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
+    if (tbname_to_desp.find(tableName) != tbname_to_desp.end())
+        return -1;
     char data[PAGE_SIZE];
     string tb_fn = RM_TABLE_FILENAME(tableName);
     RID rid;
@@ -206,7 +209,7 @@ RC RelationManager::deleteTable(const string &tableName)
     attrNames[0] = tableName;
     memcpy(value, &len, sizeof(int));
     memcpy(value + sizeof(int), tableName.c_str(), len);
-    scan(RM_CATALOG_NAME, "tableName", EQ_OP, value, attrNames, rsi);
+    cout<<"scanned result is  "<<scan(RM_CATALOG_NAME, "tableName", EQ_OP, value, attrNames, rsi)<<endl;
     rsi.getNextTuple(rid, data);
     deleteTuple(RM_CATALOG_NAME, rid);
     attrNames[0] = "tableID";
@@ -214,7 +217,6 @@ RC RelationManager::deleteTable(const string &tableName)
     scan(RM_ATTRIBUTES_NAME, "tableID", EQ_OP, &tbname_to_id[tableName], attrNames, rsi);
     while (-1 != rsi.getNextTuple(rid, data))
         deleteTuple(RM_ATTRIBUTES_NAME, rid);
-//    tid_to_tbname.erase(tbname_to_id[tableName]);
     tbname_to_id.erase(tableName);
     tbname_to_desp.erase(tableName);
     return 0;
@@ -237,6 +239,8 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 
 RC RelationManager::deleteTuples(const string &tableName)
 {
+    if (tbname_to_desp.find(RM_CATALOG_NAME) == tbname_to_desp.end())
+        cout<<"not find catalog in deleteTuples"<<endl;
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
@@ -277,6 +281,8 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 
 RC RelationManager::reorganizePage(const string &tableName, const unsigned pageNumber)
 {
+    if (tbname_to_desp.find(RM_CATALOG_NAME) == tbname_to_desp.end())
+        cout<<"not find catalog in reorganizePage"<<endl;
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(tableName, fh);
@@ -295,9 +301,11 @@ RC RelationManager::scan(const string &tableName,
                          const vector<string> &attributeNames,
                          RM_ScanIterator &rm_ScanIterator)
 {
+    cout<<"scanned table name is"<<tableName<<endl;
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
-    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    cout<<"in relation manager open file"<<rbfm->openFile(RM_TABLE_FILENAME(tableName), fh)<<endl;
+    cout<<fh._fh_name<<endl;
     return rbfm->scan(fh, tbname_to_desp[tableName], conditionAttribute, compOp, value,
                attributeNames, rm_ScanIterator._rmsi);
 }
