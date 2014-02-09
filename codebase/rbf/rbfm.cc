@@ -31,11 +31,13 @@ int AttrValue::readFromData(AttrType type, char *data){
 }
 
 int AttrValue::writeToData(char *data){
+    int len = 0;
     switch (_type) {
         case TypeVarChar:
-            memcpy(data, &_len, sizeof(int));
+            len = _len - 4;
+            memcpy(data, &len, sizeof(int));
             memcpy(data + sizeof(int), _sv.c_str(), _sv.length());
-            return 4;
+            return _len;
         case TypeInt:
             memcpy(data, &_iv, 4);
             return 4;
@@ -177,7 +179,6 @@ RC RecordBasedFileManager::createFile(const string &fileName) {
 }
 
 RC RecordBasedFileManager::destroyFile(const string &fileName) {
-    cout<<"fileName "<<fileName<<endl;
 	return pfm->destroyFile(fileName.c_str());
 }
 
@@ -205,10 +206,17 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle,
     assert(pgid != -1);
     fileHandle.readPage(pgid, rp_buff);
     RecordPage rp(rp_buff);
+    int n = rp.get_rcdnum(), consume = length, entry = pdt.locateRecordPage(fileHandle, pgid);
+    int free = pdt.get_pgfreelen(entry);
+    if (free > rp.getFreelen()){
+        reorganizePage(fileHandle, recordDescriptor, pgid);
+        fileHandle.readPage(pgid, rp_buff);
+    }
     RecordHeader rh = rp.allocRecordHeader(length, slotID);
-    
     rh.writeRecord(recordDescriptor, (char *)data);
-    pdt.set_pgfree_by_id(pgid, rp.getFreelen());
+    if (rp.get_rcdnum() > n)
+        consume += 2 * sizeof(int);
+    pdt.set_pgfreelen(entry, free - consume);
     fileHandle.writePage(pgid, rp_buff);
     fileHandle.writePage(pdt.in_the_page, direct_buff);
     rid.pageNum = (unsigned int)pgid;
@@ -333,7 +341,7 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
 
 RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<Attribute>
                                           &recordDescriptor, const unsigned pageNumber){
-    char buffer[PAGE_SIZE], direct_buff[PAGE_SIZE];
+    char buffer[PAGE_SIZE];
     int offset = 0;
     fileHandle.readPage(pageNumber, buffer);
     RecordPage rp(buffer);
@@ -348,9 +356,5 @@ RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<A
         }
     rp.set_freeptr(newFreePointer);
     fileHandle.writePage(pageNumber, buffer);
-    fileHandle.readPage(0, direct_buff);
-    PageDirectory pdt(direct_buff);
-    int entry = pdt.locateRecordPage(fileHandle, pageNumber);
-    pdt.set_pgfreelen(entry, rp.getFreelen());
     return 0;
 }

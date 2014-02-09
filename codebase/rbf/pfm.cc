@@ -48,7 +48,6 @@ RC PagedFileManager::destroyFile(const char *fileName)
 	if (!isFileExit(fileName))
 		return -1;
 	int ret = remove(fileName);
-    cout<<"returning value of destroyFile "<<ret<<endl;
 	return ret;
 }
 

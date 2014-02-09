@@ -92,6 +92,7 @@ int RelationManager::prepareAttrData(string tableName, Attribute attr, char *dat
     offset += sizeof(int);
     memcpy(data + offset, column_name.c_str(), len);
     offset += len;
+
     
     memcpy(data + offset, &column_type, sizeof(int));
     offset += sizeof(int);
@@ -301,11 +302,9 @@ RC RelationManager::scan(const string &tableName,
                          const vector<string> &attributeNames,
                          RM_ScanIterator &rm_ScanIterator)
 {
-    cout<<"scanned table name is"<<tableName<<endl;
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
-    cout<<"in relation manager open file"<<rbfm->openFile(RM_TABLE_FILENAME(tableName), fh)<<endl;
-    cout<<fh._fh_name<<endl;
+    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
     return rbfm->scan(fh, tbname_to_desp[tableName], conditionAttribute, compOp, value,
                attributeNames, rm_ScanIterator._rmsi);
 }

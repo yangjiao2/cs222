@@ -39,7 +39,6 @@ public:
     int firstPageWithFreelen(FileHandle &fh, int len);     //return matching pgnum
     int allocRecordPage(FileHandle &fh);           //return allocated pgnum
     static int MaximunEntryNum(void);
-    int set_pgfree_by_id(int pageID, int newlen);
     
     int nextRecordPageID(FileHandle &fh, int pageid);
     int nextRecord(FileHandle &fh, RID &rid);

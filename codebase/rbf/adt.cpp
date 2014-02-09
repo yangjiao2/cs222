@@ -9,16 +9,6 @@ int PageDirectory::MaximunEntryNum(void){
     return (PAGE_SIZE - UNIT_SIZE * 2) / (UNIT_SIZE * 2) - 1;
 }
 
-int PageDirectory::set_pgfree_by_id(int pageID, int newlen){
-    int pgnum = get_pgnum();
-    for (int i = 0; i < pgnum; i++)
-        if (get_pgid(i) == pageID){
-            set_pgfreelen(i, newlen);
-            return 0;
-        }
-    return -1;
-}
-
 int PageDirectory::moveToNext(FileHandle &fh){
     assert(get_next() != 0);
     assert(get_pgnum() == PageDirectory::MaximunEntryNum());
@@ -130,7 +120,6 @@ int PageDirectory::allocRecordPage(FileHandle &fh){
     set_pgnum(get_pgnum() + 1);
     return allocated;
 }
-
 
 bool RecordPage::isTombStone(int index){
     return get_rcdlen(index) < 0;
