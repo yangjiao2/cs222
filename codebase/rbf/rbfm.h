@@ -18,6 +18,9 @@ typedef struct
     unsigned slotNum;
 } RID;
 
+inline bool operator==(const RID& lhs, const RID& rhs){
+    return lhs.pageNum == rhs.pageNum && lhs.slotNum == rhs.slotNum;
+}
 
 // Attribute
 typedef enum { TypeInt = 0, TypeReal, TypeVarChar, TypeNone } AttrType;

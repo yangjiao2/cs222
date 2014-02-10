@@ -12,14 +12,14 @@ class BTreeNode{
 public:
     BTreeNode(FileHandle &fh, int pageNum);
     BTreeNode(FileHandle &fh, AttrType _type, int dep, int parent);
+    bool find(void *key, RID rid);
+    bool insert(void *key, RID rid); //returning whether split, (key, rid) no duplicates
     
 private:
     void dump();
     int freeSpace();
     bool moreThanHalf();
     bool canAccept(void *data);
-    bool find(void *key, RID rid);
-    bool insert(void *key, RID rid);
     
 private:
     int _leftID; //no need to load neighbourings in advance, we have id => BTreeNode constructor
@@ -41,7 +41,6 @@ public:
     LeafNode(FileHandle &fh, int pageNum);
     LeafNode(BTreeNode *parent); // new a new leaf node
     void dump();
-    
     bool find(void *key, RID rid);
     bool insert(void *key, RID rid);
 

@@ -66,6 +66,45 @@ void BTreeNode::dump(){
     _fh.writePage(_pgid, _buffer);
 }
 
+int BTreeNode::freeSpace(){
+    int N = (int)_keys.size(), offset;
+    memcpy(&offset, _buffer + PAGE_SIZE - (N + 7) * sizeof(int), sizeof(int));
+    //reserve 2 for future inserting slot
+    return PAGE_SIZE - ((N + 10) * sizeof(int) + offset);
+}
+
+bool BTreeNode::moreThanHalf(){
+    return freeSpace() <= PAGE_SIZE / 2;
+}
+
+bool BTreeNode::canAccept(void *data){
+    AttrValue av;
+    return av.readFromData(_type, (char *)data) < freeSpace();
+}
+
+//TODO: change to binary search later
+bool BTreeNode::find(void *key, RID rid){
+    AttrValue av;
+    av.readFromData(_type, (char *)key);
+    int N = (int)_keys.size(), next, i = 0;
+    for (; i < N; i++)
+        if (AttrValue::compareValue(_keys[i], av, GT_OP))
+            break;
+    if (i == N)
+        next = _childs[N];
+    else if (AttrValue::compareValue(_keys[i], av, LE_OP))
+        next = _childs[i+1];
+    else
+        next = _childs[i];
+    if (next == EMPTY_NODE)
+        return false;
+    if (_depth == 1) {
+        LeafNode leaf(_fh, next);
+        return leaf.find(key, rid);
+    }
+    BTreeNode inner(_fh, next);
+    return inner.find(key, rid);
+}
 
 
 LeafNode::LeafNode(FileHandle &fh, int pageNum){
@@ -92,24 +131,6 @@ LeafNode::LeafNode(FileHandle &fh, int pageNum){
         offset += 8;
     }
 }
-
-int BTreeNode::freeSpace(){
-    int N = (int)_keys.size(), offset;
-    memcpy(&offset, _buffer + PAGE_SIZE - (N + 7) * sizeof(int), sizeof(int));
-    //reserve 2 for future inserting slot
-    return PAGE_SIZE - ((N + 10) * sizeof(int) + offset);
-}
-
-bool BTreeNode::moreThanHalf(){
-    return freeSpace() <= PAGE_SIZE / 2;
-}
-
-bool BTreeNode::canAccept(void *data){
-    AttrValue av;
-    return av.readFromData(_type, (char *)data) < freeSpace();
-}
-
-
 
 LeafNode::LeafNode(BTreeNode *parent){
     assert(parent);
@@ -159,3 +180,19 @@ bool LeafNode::canAccept(void *data){
     AttrValue av;
     return freeSpace() >= av.readFromData(_type, (char *)data);
 }
+
+//TODO: change to binary search later
+bool LeafNode::find(void *key, RID rid){
+    AttrValue av;
+    av.readFromData(_type, (char *)key);
+    int i, N = (int)_keys.size();
+    for (i = 0; i < N; i++)
+        if (_rids[i] == rid && AttrValue::compareValue(av, _keys[i], EQ_OP))
+            return true;
+    return false;
+}
+
+
+
+
+
