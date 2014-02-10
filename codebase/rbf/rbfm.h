@@ -53,8 +53,8 @@ public:
     int _iv;
     float _fv;
     AttrValue(int v): _len(sizeof(int)), _sv(""), _iv(v), _fv(0) {}
-    AttrValue(float v): _len(sizeof(int)), _sv(""), _iv(0), _fv(v) {}
-    AttrValue(string v): _len(sizeof(int)), _sv(v), _iv(0), _fv(0) {}
+    AttrValue(float v): _len(sizeof(float)), _sv(""), _iv(0), _fv(v) {}
+    AttrValue(string v): _len(sizeof(int) + (int)v.length()), _sv(v), _iv(0), _fv(0) {}
     AttrValue(): _len(0), _sv(""), _iv(0), _fv(0){} //intialize to same value, only different field value matter
     int readFromData(AttrType type, char *data); //return length of the content
     int writeToData(char *data); //return length of content
