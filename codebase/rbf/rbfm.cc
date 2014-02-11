@@ -135,6 +135,7 @@ RC RecordBasedFileManager::getNextRecord(RBFM_ScanIterator &rs, void *data){
     RID rid = rs._rid;
     int offset = 0;
     char buffer[PAGE_SIZE], val[PAGE_SIZE];
+    assert(fh._fd);
     fh.readPage(0, buffer);
     PageDirectory pdt(buffer);
     AttrValue rv, cv;
@@ -195,6 +196,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle,
                                         const vector<Attribute> &recordDescriptor,
                                         const void *data, RID &rid) {
     int length = RecordHeader::getRecordLength(recordDescriptor, (char *)data);
+    length += 2 * sizeof(int); //assume it takes another offset/length entry.
     int pgid, slotID;
     char direct_buff[PAGE_SIZE], rp_buff[PAGE_SIZE];
     
@@ -254,7 +256,8 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle,
         return -1;
     fileHandle.readPage(tid.pageNum, rp_buffer);
     RecordPage rp(rp_buffer);
-    content = rp.getRecordHeaderAt(tid.slotNum - 1).getContentPointer();
+    RecordHeader rh = rp.getRecordHeaderAt(tid.slotNum - 1);
+    content = rh.getContentPointer();
     memcpy(data, content, RecordHeader::getRecordContentLength(recordDescriptor, content));
     return 0;
 }

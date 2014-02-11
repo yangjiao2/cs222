@@ -1,4 +1,5 @@
 *.o
+*.bk
 librbf.a
 rbftest
 temp.*
@@ -8,7 +9,7 @@ codebase/rm/attributes
 codebase/rm/catalog
 codebase/rm/rmtest
 codebase/rm/rmtest_extra
-codebase/rm/rmtest_[1,2]
+codebase/rm/rmtest_[1,2,3]
 codebase/rm/librm.a
 codebase/rm/ixtest[1,2]
 
