@@ -1,4 +1,5 @@
 #include "pfm.h"
+#include <cassert>
 
 PagedFileManager* PagedFileManager::_pf_manager = 0;
 
@@ -115,6 +116,7 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
+    assert(_fh_file);
 	_fh_file->seekp(pageNum * PAGE_SIZE);
 	_fh_file->write((char *)data, PAGE_SIZE);
 	return 0;

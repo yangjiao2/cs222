@@ -29,3 +29,6 @@ $(CODEROOT)/rbf/librbf.a:
 clean:
 	-rm ixtest1 ixtest2 *.a *.o
 	$(MAKE) -C $(CODEROOT)/rbf clean
+
+test:
+	rm -rf Age_idx

@@ -5,6 +5,16 @@
 
 static PagedFileManager *pfm = PagedFileManager::instance();
 
+
+BTreeNode::~BTreeNode(){
+    dump();
+    pfm->closeFile(_fh);
+}
+
+//TODO: parentID seems useless, remove it...
+//Plan: put rootID in first page, and type also in first page. _type field stores each page corresponding
+//node type.
+
 BTreeNode::BTreeNode(FileHandle &fh, int pageNum){
     fh.readPage(pageNum, _buffer);
     pfm->openFile(fh._fh_name.c_str(), _fh);
@@ -42,7 +52,7 @@ BTreeNode::BTreeNode(FileHandle &fh, AttrType type, int dep, int parent){
     _leftID = _rightID = EMPTY_NODE;
     _fh.appendPage(_buffer);
     _pgid =  _fh.getNumberOfPages() - 1;
-    _childs.clear();
+    _childs = vector<int>(1, EMPTY_NODE);
     dump();
 }
 
@@ -101,7 +111,7 @@ bool BTreeNode::shouldSplit(){
 
 
 //TODO: change to binary search later
-bool BTreeNode::find(void *key, RID rid){
+bool BTreeNode::find(const void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
     int N = (int)_keys.size(), next, i = 0;
@@ -124,6 +134,11 @@ bool BTreeNode::find(void *key, RID rid){
     return inner.find(key, rid);
 }
 
+
+LeafNode::~LeafNode(){
+    pfm->closeFile(_fh);
+    cout<<"closed fh in ~leafNode"<<endl;
+}
 
 LeafNode::LeafNode(FileHandle &fh, int pageNum){
     fh.readPage(pageNum, _buffer);
@@ -223,7 +238,7 @@ AttrValue LeafNode::firstKeyValue(){
 }
 
 //TODO: change to binary search later
-bool LeafNode::find(void *key, RID rid){
+bool LeafNode::find(const void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
     int i, N = (int)_keys.size();
@@ -253,11 +268,13 @@ void LeafNode::split(){
 }
 
 //return whether splitted
-bool LeafNode::insert(void *key, RID rid){
+bool LeafNode::insert(const void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
     vector<AttrValue>::iterator ind = lower_bound(_keys.begin(), _keys.end(), av);
-    assert(*ind != av); //assume no same key multiple entries case.
+    if (ind  != _keys.end())
+        cout<<"leaf insert:"<<av._iv<<" "<<(*ind)._iv<<endl;
+    assert(ind == _keys.end() || *ind != av); //assume no same key multiple entries case.
     int i = (int)(ind - _keys.begin());
     _keys.insert(_keys.begin() + i, av);
     _rids.insert(_rids.begin() + i, rid);
@@ -303,7 +320,7 @@ void BTreeNode::split(){
 
 //TODO: write some print BTreeNode function to debug
 
-bool BTreeNode::insert(void *key, RID rid){
+bool BTreeNode::insert(const void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
     //root, first time, empty, special handle
@@ -343,6 +360,22 @@ bool BTreeNode::insert(void *key, RID rid){
         split();
     dump();
     return splitted;
+}
+
+RC BTreeNode::rootInsert(const void *key, RID rid, BTreeNode * &newroot){
+    bool split = insert(key, rid);
+    if (!split){
+        newroot = this;
+    }
+    else{
+        newroot = new BTreeNode(_fh,  _type, _depth + 1, EMPTY_NODE);
+        BTreeNode nbr(_fh, _rightID);
+        newroot->_keys.resize(1, nbr.pushupFirstKey());
+        newroot->_childs.resize(2);
+        newroot->_childs[0] = _pgid;
+        newroot->_childs[1] = nbr._pgid;
+    }
+    return 0;
 }
 
 

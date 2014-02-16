@@ -24,6 +24,8 @@ public:
     
     RC closeFile(FileHandle &fileHandle);
     
+    RC checkRootMap(FileHandle &fh, const Attribute &attr);
+    
     // The following two functions are using the following format for the passed key value.
     //  1) data is a concatenation of values of the attributes
     //  2) For int and real: use 4 bytes to store the value;

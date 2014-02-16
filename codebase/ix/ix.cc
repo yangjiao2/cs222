@@ -1,6 +1,8 @@
 
 #include "ix.h"
 
+#define UNIT_SIZE (sizeof(int))
+
 IndexManager* IndexManager::_index_manager = 0;
 static PagedFileManager *pfm;
 
@@ -29,6 +31,11 @@ RC IndexManager::createFile(const string &fileName)
 
 RC IndexManager::destroyFile(const string &fileName)
 {
+    if (rootsMap.find(fileName) != rootsMap.end()){
+        BTreeNode *root = rootsMap[fileName];
+        rootsMap.erase(fileName);
+        delete root;
+    }
     return pfm->destroyFile(fileName.c_str());
 }
 
@@ -42,12 +49,45 @@ RC IndexManager::closeFile(FileHandle &fileHandle)
     return pfm->closeFile(fileHandle);
 }
 
+
+RC IndexManager::checkRootMap(FileHandle &fh, const Attribute &attribute){
+    char buffer[PAGE_SIZE];
+    memset(buffer, 0, sizeof(buffer));
+    string fname = fh._fh_name;
+    int rootID = 1;
+    assert(fname != "");
+    
+    if (rootsMap.find(fname) == rootsMap.end()){
+        if (fh.getNumberOfPages() != 0){
+            fh.readPage(0, buffer);
+            memcpy(&rootID, buffer, UNIT_SIZE);
+            rootsMap[fname] = new BTreeNode(fh, rootID);
+        }
+        //intialize: page0 root pointer, page 1 root page.
+        else{
+            memcpy(buffer, &rootID, UNIT_SIZE);
+            fh.appendPage(buffer);
+            rootsMap[fname] = new BTreeNode(fh, attribute.type, rootID, EMPTY_NODE);
+        }
+    }
+    return rootsMap[fname]->getType() == attribute.type ? 0 : -1;
+}
+
+//TODO: return false if insert fail, could be duplicates: same key, multiple rids
+//only the first time insert, we know what type of BTreeNode, ft...
+
 RC IndexManager::insertEntry(FileHandle &fileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-    if (fileHandle.getNumberOfPages() == 0)
-        rootsMap[fileHandle._fh_name] =
-        new BTreeNode(fileHandle, attribute.type, 1, EMPTY_NODE);
-	return -1;
+    if (checkRootMap(fileHandle, attribute) != 0)
+        return -1;
+    BTreeNode *root = rootsMap[fileHandle._fh_name], *newroot;
+    if (root->rootInsert(key, rid, newroot) != 0)
+        return -1;
+    if (root != newroot){
+        rootsMap[fileHandle._fh_name] = newroot;
+        delete root; //easy to crash, i guess :-(
+    }
+    return 0;
 }
 
 RC IndexManager::deleteEntry(FileHandle &fileHandle, const Attribute &attribute, const void *key, const RID &rid)

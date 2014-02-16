@@ -12,8 +12,13 @@ class BTreeNode{
 public:
     BTreeNode(FileHandle &fh, int pageNum);
     BTreeNode(FileHandle &fh, AttrType _type, int dep, int parent);
-    bool find(void *key, RID rid);
-    bool insert(void *key, RID rid); //returning whether split, (key, rid) no duplicates
+    AttrType getType(){
+        return _type;
+    }
+    ~BTreeNode();
+    bool find(const void *key, RID rid);
+    bool insert(const void *key, RID rid); //returning whether split, (key, rid) no duplicates
+    RC rootInsert(const void *key, RID rid, BTreeNode * &newroot);
     
 private:
     void dump();
@@ -43,9 +48,10 @@ public:
     LeafNode(FileHandle &fh, int pageNum);
     LeafNode(BTreeNode *parent); // new a new leaf node
     void dump();
-    bool find(void *key, RID rid);
-    bool insert(void *key, RID rid);
+    bool find(const void *key, RID rid);
+    bool insert(const void *key, RID rid);
     AttrValue firstKeyValue();
+    ~LeafNode();
 
 private:
     void split();
