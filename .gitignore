@@ -2,7 +2,7 @@
 *.bk
 *.a
 rbftest
-temp.*
+temp*
 temp/
 cs222.xcodeproj/
 codebase/rm/attributes
@@ -13,4 +13,4 @@ codebase/rm/rmtest_[1,2,3]
 codebase/rm/librm.a
 ixtest1
 ixtest2
-
+Age_idx

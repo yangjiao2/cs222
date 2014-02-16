@@ -11,10 +11,6 @@ BTreeNode::~BTreeNode(){
     pfm->closeFile(_fh);
 }
 
-//TODO: parentID seems useless, remove it...
-//Plan: put rootID in first page, and type also in first page. _type field stores each page corresponding
-//node type.
-
 BTreeNode::BTreeNode(FileHandle &fh, int pageNum){
     fh.readPage(pageNum, _buffer);
     pfm->openFile(fh._fh_name.c_str(), _fh);
@@ -76,22 +72,6 @@ void BTreeNode::dump(){
     memcpy(_buffer + offset, &_childs[N], UNIT_SIZE);
     _fh.writePage(_pgid, _buffer);
 }
-
-/*
- int BTreeNode::freeSpace(){
- int N = (int)_keys.size(), offset;
- memcpy(&offset, _buffer + PAGE_SIZE - (N + 7) * sizeof(int), sizeof(int));
- //reserve 2 for future inserting slot
- return PAGE_SIZE - ((N + 10) * sizeof(int) + offset);
- }
- */
-
-/*
- bool BTreeNode::canAcceptNewEntry(void *data){
- AttrValue av;
- // key entry size + child entry size
- return av.readFromData(_type, (char *)data) + sizeof(int) < freeSpace();
- }*/
 
 int BTreeNode::sizeOnDisk(){
     int N = (int) _keys.size();
@@ -197,30 +177,13 @@ void LeafNode::dump(){
     _fh.writePage(_pgid, _buffer);
 }
 
-/*
-int LeafNode::freeSpace(){
-    int N = (int)_keys.size(), offset;
-    int total =(N + 5) * sizeof(int) + 3 * sizeof(int); //2 reserve for RID, one for slot
-    if (N > 0){
-        memcpy(&offset, _buffer + PAGE_SIZE - 4 * (N + 5), sizeof(int));
-        total += _keys[N-1]._len + offset + sizeof(int) * 2;
-    }
-    return PAGE_SIZE - total;
-}
-
-bool LeafNode::moreThanHalf(){
-    return freeSpace() <= PAGE_SIZE / 2;
-}
-
-bool LeafNode::canAcceptNewEntry(void *keyData){
-    AttrValue av;
-    //key entry size + rid entry size
-    return freeSpace() >= av.readFromData(_type, (char *)keyData) + 2 * sizeof(int);
-}*/
-
 
 int LeafNode::sizeOnDisk(){
-    int size = 0;
+    int size = UNIT_SIZE * 5;
+    for (int i = 0; i < (int) _keys.size(); i++) {
+        size += _keys[i]._len;
+        size += UNIT_SIZE * 2;
+    }
     return size;
 }
 
@@ -229,7 +192,7 @@ bool LeafNode::shouldMerge(){
 }
 
 bool LeafNode::shouldSplit(){
-    return sizeOnDisk() >= PAGE_SIZE / 2;
+    return sizeOnDisk() >= PAGE_SIZE;
 }
 AttrValue LeafNode::firstKeyValue(){
     assert(!_keys.empty());
@@ -272,15 +235,15 @@ bool LeafNode::insert(const void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
     vector<AttrValue>::iterator ind = lower_bound(_keys.begin(), _keys.end(), av);
-    if (ind  != _keys.end())
-        cout<<"leaf insert:"<<av._iv<<" "<<(*ind)._iv<<endl;
     assert(ind == _keys.end() || *ind != av); //assume no same key multiple entries case.
     int i = (int)(ind - _keys.begin());
     _keys.insert(_keys.begin() + i, av);
     _rids.insert(_rids.begin() + i, rid);
     bool splitted = shouldSplit();
-    if (splitted)
+    if (splitted){
+        cout<<"leaf splitted"<<endl;
         split();
+    }
     dump();
     return splitted;
 }
