@@ -17,9 +17,11 @@ public:
     
 private:
     void dump();
+    void split();
     int sizeOnDisk();
     bool shouldSplit();
     bool shouldMerge();
+    AttrValue pushupFirstKey();
     
 private:
     int _leftID; //no need to load neighbourings in advance, we have id => BTreeNode constructor
@@ -43,8 +45,10 @@ public:
     void dump();
     bool find(void *key, RID rid);
     bool insert(void *key, RID rid);
+    AttrValue firstKeyValue();
 
 private:
+    void split();
     int sizeOnDisk();
     bool shouldSplit();
     bool shouldMerge();

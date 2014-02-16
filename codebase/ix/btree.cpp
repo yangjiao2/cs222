@@ -42,7 +42,7 @@ BTreeNode::BTreeNode(FileHandle &fh, AttrType type, int dep, int parent){
     _leftID = _rightID = EMPTY_NODE;
     _fh.appendPage(_buffer);
     _pgid =  _fh.getNumberOfPages() - 1;
-    _childs = vector<int>(1, EMPTY_NODE);
+    _childs.clear();
     dump();
 }
 
@@ -217,7 +217,10 @@ bool LeafNode::shouldMerge(){
 bool LeafNode::shouldSplit(){
     return sizeOnDisk() >= PAGE_SIZE / 2;
 }
-
+AttrValue LeafNode::firstKeyValue(){
+    assert(!_keys.empty());
+    return _keys[0];
+}
 
 //TODO: change to binary search later
 bool LeafNode::find(void *key, RID rid){
@@ -230,6 +233,25 @@ bool LeafNode::find(void *key, RID rid){
     return false;
 }
 
+
+void LeafNode::split(){
+    assert(shouldSplit());
+    int N = (int) _keys.size();
+    int range = N / 2;
+    BTreeNode parent(_fh, _parentID);
+    LeafNode nbr(&parent);
+    nbr._leftID = _pgid;
+    nbr._rightID = _rightID;
+    _rightID = nbr._pgid;
+    nbr._keys.resize(N - range);
+    nbr._rids.resize(N - range);
+    copy(_keys.begin() + range, _keys.end(), nbr._keys.begin());
+    copy(_rids.begin() + range, _rids.end(), nbr._rids.begin());
+    _keys.erase(_keys.begin() + range, _keys.end());
+    _rids.erase(_rids.begin() + range, _rids.end());
+    nbr.dump();
+}
+
 //return whether splitted
 bool LeafNode::insert(void *key, RID rid){
     AttrValue av;
@@ -239,52 +261,88 @@ bool LeafNode::insert(void *key, RID rid){
     int i = (int)(ind - _keys.begin());
     _keys.insert(_keys.begin() + i, av);
     _rids.insert(_rids.begin() + i, rid);
-    int N = (int) _keys.size();
-    bool split = shouldSplit();
-    if (split) {
-        int range = N / 2;
-        BTreeNode parent(_fh, _parentID);
-        LeafNode nbr(&parent);
-        nbr._leftID = _pgid;
-        nbr._rightID = _rightID;
-        _rightID = nbr._pgid;
-        nbr._keys.resize(N - range);
-        nbr._rids.resize(N - range);
-        copy(_keys.begin() + range, _keys.end(), nbr._keys.begin());
-        copy(_rids.begin() + range, _rids.end(), nbr._rids.begin());
-        _keys.erase(_keys.begin() + range, _keys.end());
-        _rids.erase(_rids.begin() + range, _rids.end());
-        nbr.dump();
-    }
+    bool splitted = shouldSplit();
+    if (splitted)
+        split();
     dump();
-    return split;
+    return splitted;
+}
+
+AttrValue BTreeNode::pushupFirstKey(){
+    assert(!_keys.empty());
+    assert(_childs.size() == _keys.size() + 1);
+    AttrValue av = _keys[0];
+    _keys.erase(_keys.begin());
+    _childs.erase(_childs.begin());
+    dump();
+    return av;
+}
+
+/*
+ current node   =>      _keys: [0, range),      _childs: [0, range] = [0, range + 1)
+ new splitted   =>      _keys: [range, end)     _childs: [range, end')
+ note: _childs[range] would be in both nodes, but
+ splitted node's _keys[0], _childs[0] would be removed in pushup
+ */
+void BTreeNode::split(){
+    assert(shouldSplit());
+    int N = (int)_keys.size();
+    int range = N / 2;
+    BTreeNode nbr(_fh,_type, _depth, _parentID);
+    nbr._keys.resize(N - range);
+    nbr._childs.resize(N - range + 1);
+    nbr._leftID = _pgid;
+    nbr._rightID = _rightID;
+    _rightID = nbr._pgid;
+    copy(_keys.begin() + range, _keys.end(), nbr._keys.begin());
+    copy(_childs.begin() + range, _childs.end(), nbr._childs.begin());
+    _keys.erase(_keys.begin() + range, _keys.end());
+    _childs.erase(_childs.begin() + range + 1, _childs.end());
+    nbr.dump();
 }
 
 //TODO: write some print BTreeNode function to debug
+
 bool BTreeNode::insert(void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
-    //root, first time, empty, special
+    //root, first time, empty, special handle
     if (_keys.empty()){
-        _keys.insert(_keys.begin(), av);
-        LeafNode leaf(this);
-        leaf.insert(key, rid);
-        _childs.insert(_childs.begin(), leaf._pgid);
-        leaf.dump();
-        dump();
-        return false;
+        _keys.resize(1, av);
+        _childs.resize(2, EMPTY_NODE);
     }
-    int ind = (int)(lower_bound(_keys.begin(), _keys.end(), av) - _keys.begin());
-    int next = _keys[ind] >= av ? _childs[ind] : _childs[ind+1];
-    bool split = false;
+    //index: next level's _childs[index] goes down to
+    int index = (int)(upper_bound(_keys.begin(), _keys.end(), av) - _keys.begin());
+    int &next = _childs[index];
     if (_depth == 1) {
+        if (next == EMPTY_NODE){
+            LeafNode leaf(this);
+            leaf.insert(key, rid);
+            next = leaf._pgid;
+            return false;
+        }
         LeafNode leaf(_fh, next);
-        split = leaf.insert(key, rid); //not returing this split
-        //check split, add new entry and pointer
+        bool childsplit = leaf.insert(key, rid);
+        if (childsplit){
+            LeafNode nbr(_fh, leaf._rightID);
+            _keys.insert(_keys.begin() + index, nbr.firstKeyValue());
+            _childs.insert(_childs.begin() + index + 1, nbr._pgid);
+        }
     }
     else{
+        BTreeNode bnode(_fh, next);
+        bool childsplit = bnode.insert(key, rid);
+        if (childsplit) {
+            BTreeNode bnbr(_fh, bnode._rightID);
+            _keys.insert(_keys.begin() + index, bnbr.pushupFirstKey()); // TODO: maybe should also remove _childs[0];
+            _childs.insert(_childs.begin() + index + 1, bnbr._pgid);
+        }
     }
-    return split;
+    bool splitted = shouldSplit();
+    if (splitted)
+        split();
+    dump();
+    return splitted;
 }
 
 
