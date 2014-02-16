@@ -1,3 +1,12 @@
+/*
+ TODO:
+ 1) ROOT_EMPTY, left and right node should be connected. other connected is achieved during split
+ 2) BootNode Split: should reassign parent id to new splitted child, could factor into a method
+ 3) For Debug: output and check consistency: parent_pgid == page[child[i]]'s parent id, print out
+ 4) rootInsert(): should return failure, if duplicates
+ 5) DelteEntry(): ...
+ */
+
 
 #include "btree.h"
 
@@ -258,6 +267,18 @@ AttrValue BTreeNode::pushupFirstKey(){
     return av;
 }
 
+
+void BTreeNode::claimChilds(){
+    int N = (int) _childs.size();
+    char buffer[PAGE_SIZE];
+    for (int i = 0; i < N; i++)
+        if (_childs[i] != EMPTY_NODE){
+            _fh.readPage(_childs[i], buffer);
+            memcpy(buffer + PAGE_SIZE - 4 * UNIT_SIZE, &_pgid, UNIT_SIZE); //offset works no matter LeafNode or BTreeNode
+            _fh.writePage(_childs[i], buffer);
+        }
+}
+
 /*
  current node   =>      _keys: [0, range),      _childs: [0, range] = [0, range + 1)
  new splitted   =>      _keys: [range, end)     _childs: [range, end')
@@ -278,10 +299,9 @@ void BTreeNode::split(){
     copy(_childs.begin() + range, _childs.end(), nbr._childs.begin());
     _keys.erase(_keys.begin() + range, _keys.end());
     _childs.erase(_childs.begin() + range + 1, _childs.end());
+    nbr.claimChilds();
     nbr.dump();
 }
-
-//TODO: write some print BTreeNode function to debug
 
 bool BTreeNode::insert(const void *key, RID rid){
     AttrValue av;
@@ -337,6 +357,8 @@ RC BTreeNode::rootInsert(const void *key, RID rid, BTreeNode * &newroot){
         newroot->_childs.resize(2);
         newroot->_childs[0] = _pgid;
         newroot->_childs[1] = nbr._pgid;
+        newroot->claimChilds();
+        newroot->dump();
     }
     return 0;
 }
