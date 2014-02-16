@@ -3,6 +3,8 @@
 
 PagedFileManager* PagedFileManager::_pf_manager = 0;
 
+#define pfm (PagedFileManager::instance())
+
 PagedFileManager* PagedFileManager::instance()
 {
 	if(!_pf_manager)
@@ -27,11 +29,18 @@ bool PagedFileManager::isFileExit(const char *filename)
 	return false;
 }
 
-//TODO: close all open files, no fstream pointer
 PagedFileManager::~PagedFileManager()
 {
+    for (map<string, fstream *>::iterator itr = _pf_open_files.begin();
+         itr != _pf_open_files.end(); itr++)
+        itr->second->close();
 }
 
+
+fstream *PagedFileManager::get_fstream(string name){
+    assert(_pf_open_files.find(name) != _pf_open_files.end());
+    return _pf_open_files[name];
+}
 
 //the allocation of head page should be business of PageManager
 RC PagedFileManager::createFile(const char *fileName)
@@ -56,17 +65,16 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
 {
 	if (!isFileExit(fileName))
 		return -1;
-	if (fileHandle._fh_file != NULL)
+	if (fileHandle.isAttached())
 		return -1;
-	//should not use stack variable and then assign addresss to _fh_file.
-	//becase of the stack variable scope
-	fileHandle._fh_file = new fstream(fileName,fstream::in | fstream::out);
-	fileHandle._fh_name = fileName;
 	string fn(fileName);
-	if (_pf_open_count.find(fn) == _pf_open_count.end())
+	if (_pf_open_count.find(fn) == _pf_open_count.end()){
 		_pf_open_count[fn] = 1;
+        _pf_open_files[fn] = new fstream(fileName,fstream::in | fstream::out);
+    }
 	else
 		_pf_open_count[fn]++;
+	fileHandle._fh_name = fileName;
 	return 0;
 }
 
@@ -74,17 +82,15 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
 //only close file when open count of file decreases to 0
 RC PagedFileManager::closeFile(FileHandle &fileHandle)
 {
-    if (!fileHandle._fh_file)
+    if (!fileHandle.isAttached())
         return -1;
-	fstream *fs = fileHandle._fh_file;
 	string fn(fileHandle._fh_name);
-	fs->flush();
 	_pf_open_count[fn]--;
 	if (_pf_open_count[fn] == 0){
-		fs->close();
+        _pf_open_files[fn]->close();
 		_pf_open_count.erase(fn);
+        _pf_open_files.erase(fn);
 	}
-	fileHandle._fh_file = NULL;
 	fileHandle._fh_name = "";
 	return 0;
 }
@@ -93,32 +99,37 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
 FileHandle::FileHandle()
 {
 	_fh_name = "";
-	_fh_file = NULL;
+}
+
+bool FileHandle::isAttached(){
+    return _fh_name != "";
 }
 
 
 FileHandle::~FileHandle()
 {
-	if (_fh_file){
-		PagedFileManager *pf = PagedFileManager::instance();
-		pf->closeFile(*this);
-	}
+	if (isAttached())
+		pfm->closeFile(*this);
 }
 
 
 //pagenum start from 0
 RC FileHandle::readPage(PageNum pageNum, void *data)
 {
-	_fh_file->seekg(pageNum * PAGE_SIZE);
-	_fh_file->read((char *)data, PAGE_SIZE);
+    fstream *fs = pfm->get_fstream(_fh_name);
+	fs->seekg(pageNum * PAGE_SIZE);
+	fs->read((char *)data, PAGE_SIZE);
 	return 0;
 }
 
+
+//TODO: writePage should fail if pageNum not exists
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
-    assert(_fh_file);
-	_fh_file->seekp(pageNum * PAGE_SIZE);
-	_fh_file->write((char *)data, PAGE_SIZE);
+    fstream *fs = pfm->get_fstream(_fh_name);
+    assert(fs);
+	fs->seekp(pageNum * PAGE_SIZE);
+	fs->write((char *)data, PAGE_SIZE);
 	return 0;
 }
 
@@ -134,8 +145,9 @@ RC FileHandle::appendPage(const void *data)
 
 unsigned FileHandle::getNumberOfPages()
 {
-	_fh_file->seekg(0, fstream::end);
-	return (unsigned)_fh_file->tellg() / PAGE_SIZE;
+    fstream *fs = pfm->get_fstream(_fh_name);
+	fs->seekg(0, fstream::end);
+	return (unsigned)fs->tellg() / PAGE_SIZE;
 }
 
 

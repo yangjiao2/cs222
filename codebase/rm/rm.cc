@@ -268,7 +268,8 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 {
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
-    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
+    if (rbfm->openFile(RM_TABLE_FILENAME(tableName), fh) != 0)
+        return -1;
     return rbfm->readRecord(fh, tbname_to_desp[tableName], rid, data);
 }
 

@@ -4,7 +4,9 @@
 #define UNIT_SIZE (sizeof(int))
 
 IndexManager* IndexManager::_index_manager = 0;
-static PagedFileManager *pfm;
+//static PagedFileManager *pfm;
+
+#define pfm (PagedFileManager::instance())
 
 
 IndexManager* IndexManager::instance()
@@ -17,7 +19,6 @@ IndexManager* IndexManager::instance()
 
 IndexManager::IndexManager()
 {
-    pfm = PagedFileManager::instance();
 }
 
 IndexManager::~IndexManager()

@@ -22,6 +22,7 @@ class FileHandle;
 
 class PagedFileManager
 {
+    friend class FileHandle;
 public:
     static PagedFileManager* instance();                     // Access to the _pf_manager instance
 
@@ -32,6 +33,7 @@ public:
 
 private:
 	bool isFileExit(const char *filename);
+    fstream *get_fstream(string name);
 
 protected:
     PagedFileManager();                                   // Constructor
@@ -40,6 +42,7 @@ protected:
 private:
     static PagedFileManager *_pf_manager;
 	map<string, int> _pf_open_count; //record the open count of certain file
+    map<string, fstream *> _pf_open_files; //record the open count of certain file
 };
 
 
@@ -53,12 +56,13 @@ public:
     RC writePage(PageNum pageNum, const void *data);                    // Write a specific page
     RC appendPage(const void *data);                                    // Append a specific page
     unsigned getNumberOfPages();                                        // Get the number of pages in the file
+    bool isAttached();
 
 	//associated file
-	string _fh_name; // file name
-	fstream *_fh_file; // fstream
+	string _fh_name;
 
 private:
+
 };
 
 #endif

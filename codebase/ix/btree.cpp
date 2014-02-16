@@ -137,7 +137,6 @@ bool BTreeNode::find(const void *key, RID rid){
 
 LeafNode::~LeafNode(){
     pfm->closeFile(_fh);
-    cout<<"closed fh in ~leafNode"<<endl;
 }
 
 LeafNode::LeafNode(FileHandle &fh, int pageNum){
@@ -269,6 +268,7 @@ void LeafNode::split(){
 
 //return whether splitted
 bool LeafNode::insert(const void *key, RID rid){
+    cout<<"leaf node on page "<<_pgid<<endl;
     AttrValue av;
     av.readFromData(_type, (char *)key);
     vector<AttrValue>::iterator ind = lower_bound(_keys.begin(), _keys.end(), av);
