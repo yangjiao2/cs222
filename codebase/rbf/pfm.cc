@@ -73,6 +73,8 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
 //only close file when open count of file decreases to 0
 RC PagedFileManager::closeFile(FileHandle &fileHandle)
 {
+    if (!fileHandle._fh_file)
+        return -1;
 	fstream *fs = fileHandle._fh_file;
 	string fn(fileHandle._fh_name);
 	fs->flush();

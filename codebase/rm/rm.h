@@ -29,7 +29,10 @@
 class RM_ScanIterator {
 public:
     RM_ScanIterator() {};
-    ~RM_ScanIterator() {};
+    ~RM_ScanIterator() {
+//        cout<<"scanner's desconstructor"<<endl;
+        close();
+    };
     
     // "data" follows the same format as RelationManager::insertTuple()
     RC getNextTuple(RID &rid, void *data);

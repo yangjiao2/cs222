@@ -17,9 +17,9 @@ public:
     
 private:
     void dump();
-    int freeSpace();
-    bool moreThanHalf();
-    bool canAccept(void *data);
+    int sizeOnDisk();
+    bool shouldSplit();
+    bool shouldMerge();
     
 private:
     int _leftID; //no need to load neighbourings in advance, we have id => BTreeNode constructor
@@ -45,9 +45,9 @@ public:
     bool insert(void *key, RID rid);
 
 private:
-    int freeSpace();
-    bool moreThanHalf();
-    bool canAccept(void *data);
+    int sizeOnDisk();
+    bool shouldSplit();
+    bool shouldMerge();
     
 private:
     int _leftID;

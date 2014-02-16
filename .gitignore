@@ -1,6 +1,6 @@
 *.o
 *.bk
-librbf.a
+*.a
 rbftest
 temp.*
 temp/
@@ -11,5 +11,6 @@ codebase/rm/rmtest
 codebase/rm/rmtest_extra
 codebase/rm/rmtest_[1,2,3]
 codebase/rm/librm.a
-codebase/rm/ixtest[1,2]
+ixtest1
+ixtest2
 

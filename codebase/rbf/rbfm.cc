@@ -135,7 +135,6 @@ RC RecordBasedFileManager::getNextRecord(RBFM_ScanIterator &rs, void *data){
     RID rid = rs._rid;
     int offset = 0;
     char buffer[PAGE_SIZE], val[PAGE_SIZE];
-    assert(fh._fd);
     fh.readPage(0, buffer);
     PageDirectory pdt(buffer);
     AttrValue rv, cv;
