@@ -1,10 +1,13 @@
 /*
  TODO:
- 1) ROOT_EMPTY, left and right node should be connected. other connected is achieved during split
- 2) BootNode Split: should reassign parent id to new splitted child, could factor into a method
- 3) For Debug: output and check consistency: parent_pgid == page[child[i]]'s parent id, print out
- 4) rootInsert(): should return failure, if duplicates
- 5) DelteEntry(): ...
+ X  1) ROOT_EMPTY, left and right node should be connected. other connected is achieved during split
+ ANS: no need for special case, intialize root to empty _keys, 1 _childs. it would split automatically
+ 
+ X 2) BootNode Split: should reassign parent id to new splitted child, could factor into a method
+   3) For Debug: output and check consistency: parent_pgid == page[child[i]]'s parent id, print out
+ X 4) rootInsert(): should return failure, if duplicates
+ 
+   5) Delete(): ... trikcy, if merge, parent node design merge-with-right or merge-with left.
  */
 
 
@@ -103,16 +106,8 @@ bool BTreeNode::shouldSplit(){
 bool BTreeNode::find(const void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
-    int N = (int)_keys.size(), next, i = 0;
-    for (; i < N; i++)
-        if (AttrValue::compareValue(_keys[i], av, GT_OP))
-            break;
-    if (i == N)
-        next = _childs[N];
-    else if (AttrValue::compareValue(_keys[i], av, LE_OP))
-        next = _childs[i+1];
-    else
-        next = _childs[i];
+    int index = (int)(upper_bound(_keys.begin(), _keys.end(), av) - _keys.begin());
+    int next = _childs[index];
     if (next == EMPTY_NODE)
         return false;
     if (_depth == 1) {
@@ -208,15 +203,13 @@ AttrValue LeafNode::firstKeyValue(){
     return _keys[0];
 }
 
-//TODO: change to binary search later
 bool LeafNode::find(const void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
-    int i, N = (int)_keys.size();
-    for (i = 0; i < N; i++)
-        if (_rids[i] == rid && av == _keys[i])
-            return true;
-    return false;
+    vector<AttrValue>::iterator ind = lower_bound(_keys.begin(), _keys.end(), av);
+    if (ind == _keys.end() || *ind != av)
+        return false;
+    return true;
 }
 
 
@@ -306,11 +299,10 @@ void BTreeNode::split(){
 bool BTreeNode::insert(const void *key, RID rid){
     AttrValue av;
     av.readFromData(_type, (char *)key);
-    //root, first time, empty, special handle
-    if (_keys.empty()){
-        _keys.resize(1, av);
-        _childs.resize(2, EMPTY_NODE);
-    }
+    
+    //Root Node first time insert: no need for special case, leave _keys empty, 1 entry of _childs.
+    //it would split automatically after only child spills.
+    
     //index: next level's _childs[index] goes down to
     int index = (int)(upper_bound(_keys.begin(), _keys.end(), av) - _keys.begin());
     int &next = _childs[index];
@@ -346,6 +338,8 @@ bool BTreeNode::insert(const void *key, RID rid){
 }
 
 RC BTreeNode::rootInsert(const void *key, RID rid, BTreeNode * &newroot){
+    if (find(key, rid))
+        return -1;
     bool split = insert(key, rid);
     if (!split){
         newroot = this;
@@ -362,5 +356,110 @@ RC BTreeNode::rootInsert(const void *key, RID rid, BTreeNode * &newroot){
     }
     return 0;
 }
+
+bool LeafNode::isSibling(int pgid, int &size){
+    if (pgid == EMPTY_NODE)
+        return false;
+    LeafNode sib(_fh, pgid);
+    size = sib.sizeOnDisk();
+    return sib._parentID == _parentID;
+}
+
+
+template <typename T>
+vector<T> concate_vectors(vector<T> &x, vector<T> &y) {
+    vector<T> z(x.size() + y.size());
+    z.insert(z.end(), x.begin(), x.end());
+    z.insert(z.end(), y.begin(), y.end());
+    return z;
+}
+
+
+bool LeafNode::redistribute(AttrValue &pkey){
+    int sib_size = 0, sib_id = EMPTY_NODE, size = sizeOnDisk();
+    if (isSibling(_leftID, sib_size) && size + sib_size > PAGE_SIZE)
+        sib_id = _leftID;
+    else if (isSibling(_rightID, sib_size) && size + sib_size > PAGE_SIZE)
+        sib_id = _rightID;
+    if (sib_id == EMPTY_NODE)
+        return false;
+    
+    LeafNode sib(_fh, sib_id);
+    if (sib_id == _rightID){
+        _keys.push_back(sib._keys[0]);
+        _rids.push_back(sib._rids[0]);
+        sib._keys.erase(sib._keys.begin());
+        sib._rids.erase(sib._rids.begin());
+        pkey = sib._keys[0];
+    }
+    else{
+        int index = (int)sib._keys.size() - 1;
+        _keys.insert(_keys.begin(), sib._keys[index]);
+        _rids.insert(_rids.begin(), sib._rids[index]);
+        sib._keys.erase(sib._keys.begin() + index);
+        sib._rids.erase(sib._rids.begin() + index);
+        pkey = _keys[0];
+    }
+    return true;
+}
+
+
+//merge into right_child
+bool LeafNode::merge(){
+    int sib_size = 0, sib_id = EMPTY_NODE, size = sizeOnDisk();
+    if (isSibling(_leftID, sib_size) && sib_size + size <= PAGE_SIZE)
+        sib_id = _leftID;
+    else if (isSibling(_rightID, sib_size) && sib_size + size <= PAGE_SIZE)
+        sib_id = _rightID;
+    if (sib_id == EMPTY_NODE)
+        return false;
+    LeafNode sib(_fh, sib_id);
+    if (sib_id == _rightID){
+        sib._keys = concate_vectors<AttrValue>(_keys, sib._keys);
+        sib._rids = concate_vectors<RID>(_rids, sib._rids);
+    }
+    else{
+        _keys = concate_vectors<AttrValue>(sib._keys, _keys);
+        _rids = concate_vectors<RID>(sib._rids, _rids);
+    }
+    return true;
+}
+
+
+bool LeafNode::Delete(const void *key, RID rid, AttrValue &pkey){
+    AttrValue av;
+    av.readFromData(_type, (char *)key);
+    int index = (int)(lower_bound(_keys.begin(), _keys.end(), av) - _keys.begin());
+    assert(_keys[index] == av);
+    _keys.erase(_keys.begin() + index);
+    _rids.erase(_rids.begin() + index);
+    if (!shouldMerge())
+        return false;
+    if (redistribute(pkey))
+        return false;
+    if (merge())
+        return true;
+    //unable to redistribute or merge, just return, may happen due to lack of entries
+    return false;
+}
+
+
+
+//TODO
+bool BTreeNode::Delete(const void *key, RID rid, AttrValue &par_key){
+    
+    return false;
+}
+
+
+RC BTreeNode::rootDelete(const void *key, RID rid, BTreeNode * &newroot){
+    if (!find(key, rid))
+        return -1;
+    //modify newroot: only more than one layer, and key is empty
+    if (_depth > 1 && _keys.empty()){
+    }
+    return 0;
+}
+
 
 

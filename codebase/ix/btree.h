@@ -6,6 +6,15 @@
 
 #define EMPTY_NODE (-1)
 
+typedef enum {
+    BT_SUCCESS = 0,
+    BT_FAIL,
+    BT_SPLIT,
+    BT_REDIST,
+    BT_MERGE
+} BTResult;
+
+
 class BTreeNode{
     friend class BTreeNode;
     friend class LeafNode;
@@ -17,8 +26,8 @@ public:
     }
     ~BTreeNode();
     bool find(const void *key, RID rid);
-    bool insert(const void *key, RID rid); //returning whether split, (key, rid) no duplicates
     RC rootInsert(const void *key, RID rid, BTreeNode * &newroot);
+    RC rootDelete(const void *key, RID rid, BTreeNode * &newroot);
     
 private:
     void dump();
@@ -28,6 +37,17 @@ private:
     bool shouldMerge();
     AttrValue pushupFirstKey();
     void claimChilds();
+    
+    //returning whether split, (key, rid) no duplicates
+    bool insert(const void *key, RID rid);
+    
+    //par_key is parent's key value next to pointer, pointing to this node
+    //return whether merge
+    bool Delete(const void *key, RID rid, AttrValue &par_key);
+    
+    bool redistribute(AttrValue &par_key);
+    bool merge(AttrValue &par_key);
+    bool isSibling(int pgid, int &sib_size);
     
 private:
     int _leftID; //no need to load neighbourings in advance, we have id => BTreeNode constructor
@@ -48,17 +68,25 @@ class LeafNode{
 public:
     LeafNode(FileHandle &fh, int pageNum);
     LeafNode(BTreeNode *parent); // new a new leaf node
+    ~LeafNode();
+    
+private:
     void dump();
     bool find(const void *key, RID rid);
     bool insert(const void *key, RID rid);
     AttrValue firstKeyValue();
-    ~LeafNode();
-
-private:
     void split();
     int sizeOnDisk();
     bool shouldSplit();
     bool shouldMerge();
+    bool isSibling(int pgid, int &size);
+    
+    //return whether this has merged, deciding right-merge or left-merge is parent's business:
+    //see whether pkey < _key[0] of child
+    bool Delete(const void *key, RID rid, AttrValue &pkey);
+
+    bool redistribute(AttrValue &pkey);
+    bool merge();
     
 private:
     int _leftID;
