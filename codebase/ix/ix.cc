@@ -93,7 +93,17 @@ RC IndexManager::insertEntry(FileHandle &fileHandle, const Attribute &attribute,
 
 RC IndexManager::deleteEntry(FileHandle &fileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-	return -1;
+    string fn = fileHandle._fh_name;
+    if (rootsMap.find(fn) == rootsMap.end())
+        return -1;
+    BTreeNode *root = rootsMap[fn], *newroot;
+    if (root->rootDelete(key, rid, newroot) != 0)
+        return -1;
+    if (newroot != root){
+        rootsMap[fn] = newroot;
+        delete root;
+    }
+    return 0;
 }
 
 RC IndexManager::scan(FileHandle &fileHandle,

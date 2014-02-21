@@ -59,6 +59,7 @@ public:
     AttrValue(float v): _len(sizeof(float)), _sv(""), _iv(0), _fv(v) {}
     AttrValue(string v): _len(sizeof(int) + (int)v.length()), _sv(v), _iv(0), _fv(0) {}
     AttrValue(): _len(0), _sv(""), _iv(0), _fv(0){} //intialize to same value, only different field value matter
+//    AttrValue(const AttrValue &other) : _type(other._type), _len(other._len), _sv(other._sv), _iv(other._iv), _fv(other._fv) {cout<<"copy constructor called"<<endl;}
     int readFromData(AttrType type, char *data); //return length of the content
     int writeToData(char *data); //return length of content
     static bool compareValue(AttrValue v, AttrValue cmp, CompOp op);

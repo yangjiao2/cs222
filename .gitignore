@@ -13,4 +13,6 @@ codebase/rm/rmtest_[1,2,3]
 codebase/rm/librm.a
 ixtest1
 ixtest2
+ixtest3
 Age_idx
+sync.sh

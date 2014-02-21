@@ -1,7 +1,7 @@
 
 include ../makefile.inc
 
-all: libix.a ixtest1 ixtest2
+all: libix.a ixtest1 ixtest2 ixtest3
 
 # lib file dependencies
 libix.a: libix.a(ix.o)  # and possibly other .o files
@@ -19,6 +19,8 @@ ixtest2.o: ixtest_util.h
 ixtest1: ixtest1.o libix.a $(CODEROOT)/rbf/librbf.a 
 
 ixtest2: ixtest2.o libix.a $(CODEROOT)/rbf/librbf.a 
+
+ixtest3: ixtest3.o libix.a $(CODEROOT)/rbf/librbf.a 
 
 # dependencies to compile used libraries
 .PHONY: $(CODEROOT)/rbf/librbf.a

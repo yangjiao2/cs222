@@ -257,11 +257,9 @@ int testCase_4A(const string &indexFileName, const Attribute &attribute)
     // insert entry
     for(unsigned i = 0; i <= numOfTuples; i++)
     {
-
         key = i+1;//just in case somebody starts pageNum and recordId from 1
         rid.pageNum = key;
         rid.slotNum = key+1;
-        cout<<"insert "<<key<<endl;
 
         rc = indexManager->insertEntry(fileHandle, attribute, &key, rid);
         if(rc != success)

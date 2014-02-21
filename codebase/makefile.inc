@@ -3,7 +3,8 @@
 CODEROOT = $(shell dirname $(shell pwd))
 
 #CC = gcc
-CC = clang++
+#CC = clang++
+CC = g++
 
 #CPPFLAGS = -Wall -I$(CODEROOT) -O3  # maximal optimization
 CPPFLAGS = -Wall -I$(CODEROOT) -g     # with debugging info

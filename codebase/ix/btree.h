@@ -3,6 +3,7 @@
 #include "../rbf/pfm.h"
 #include "../rbf/rbfm.h"
 #include <cassert>
+#include <algorithm>
 
 #define EMPTY_NODE (-1)
 
