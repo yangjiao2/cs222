@@ -7,6 +7,7 @@ IndexManager* IndexManager::_index_manager = 0;
 //static PagedFileManager *pfm;
 
 #define pfm (PagedFileManager::instance())
+#define idm (IndexManager::instance())
 
 
 IndexManager* IndexManager::instance()
@@ -112,10 +113,32 @@ RC IndexManager::scan(FileHandle &fileHandle,
                       const void      *highKey,
                       bool			lowKeyInclusive,
                       bool        	highKeyInclusive,
-                      IX_ScanIterator &ix_ScanIterator)
-{
-	return -1;
+                      IX_ScanIterator &ix_ScanIterator){
+    if (lowKey)
+        ix_ScanIterator._low.readFromData(attribute.type, (char *)lowKey);
+    if (highKey)
+        ix_ScanIterator._high.readFromData(attribute.type, (char *)highKey);
+    ix_ScanIterator._attr = attribute;
+    ix_ScanIterator._inc_low = lowKeyInclusive;
+    ix_ScanIterator._inc_high = highKeyInclusive;
+    if (pfm->openFile(fileHandle._fh_name.c_str(), ix_ScanIterator._fh) != 0)
+        return -1;
+    ix_ScanIterator._last_key = ix_ScanIterator._low;
+    ix_ScanIterator._rid.pageNum = ix_ScanIterator._rid.slotNum = 0;
+    return 0;
 }
+
+RC IndexManager::getNextEntry(IX_ScanIterator &ix, void *key, RID &rid){
+    if (checkRootMap(ix._fh, ix._attr) == -1)
+        return -1;
+    string fn = ix._fh._fh_name;
+    if (rootsMap[fn]->getNextEntry(ix) == -1)
+        return -1;
+    rid = ix._rid;
+    ix._last_key.writeToData((char *)key);
+    return 0;
+}
+
 
 IX_ScanIterator::IX_ScanIterator()
 {
@@ -127,12 +150,13 @@ IX_ScanIterator::~IX_ScanIterator()
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 {
-	return -1;
+    return idm->getNextEntry(*this, key, rid);
 }
 
 RC IX_ScanIterator::close()
 {
-	return -1;
+    idm->closeFile(_fh);
+    return 0;
 }
 
 void IX_PrintError (RC rc)

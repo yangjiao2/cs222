@@ -4,18 +4,30 @@
  ANS: no need for special case, intialize root to empty _keys, 1 _childs. it would split automatically
  
  X 2) BootNode Split: should reassign parent id to new splitted child, could factor into a method
- 3) For Debug: output and check consistency: parent_pgid == page[child[i]]'s parent id, print out
  X 4) rootInsert(): should return failure, if duplicates
  
- 5) Delete(): ... trikcy, if merge, parent node design merge-with-right or merge-with left.
+ X 5) Delete(): ... trikcy, if merge, parent node design merge-with-right or merge-with left.
+ X 12) Considering case: same key, different rid: (key1, value1), (key1, value2), is OK, need to handle:
+ 
+ 3) For Debug: output and check consistency: parent_pgid == page[child[i]]'s parent id, print out
+ 6) Analyze space ratio: 512K for 30000 entries, unreasonable.
+ 7) considering more _depth > 1's case,
+ 8) Why ~LeafNode(){} calling dump() would crash testCase9()
+ 9) modify root position in page 0 if height changes
+ 10) Not pass test case 8
+ 11) If merge/split is of parent's responsibility, than no need to store parentID.
+ 12) when split, detect all same key on the page: return -1 or throw exception
+ 
  */
 
 
 #include "btree.h"
+#include "ix.h"
 
 #define UNIT_SIZE (sizeof(int))
 
-static PagedFileManager *pfm = PagedFileManager::instance();
+//static PagedFileManager *pfm = PagedFileManager::instance();
+#define pfm (PagedFileManager::instance())
 
 
 BTreeNode::~BTreeNode(){
@@ -102,7 +114,6 @@ bool BTreeNode::shouldSplit(){
 }
 
 
-//TODO: change to binary search later
 bool BTreeNode::find(AttrValue key, RID rid){
     int index = (int)(upper_bound(_keys.begin(), _keys.end(), key) - _keys.begin());
     int next = _childs[index];
@@ -118,7 +129,10 @@ bool BTreeNode::find(AttrValue key, RID rid){
 
 
 LeafNode::~LeafNode(){
-    dump();
+    //    cout<<_fh._fh_name<<" loper"<<endl;
+    //    assert(_fh._fh_name.find('?') == string::npos);
+    //TODO: investigae why this could not be called? would result testCase9 fail
+    //    dump();
     pfm->closeFile(_fh);
 }
 
@@ -177,6 +191,7 @@ void LeafNode::dump(){
         memcpy(_buffer + offset + 4, &_rids[i].slotNum, sizeof(int));
         offset += 8;
     }
+    //    cout<<"finish dump"<<endl;
     _fh.writePage(_pgid, _buffer);
 }
 
@@ -206,7 +221,11 @@ bool LeafNode::find(AttrValue key, RID rid){
     vector<AttrValue>::iterator ind = lower_bound(_keys.begin(), _keys.end(), key);
     if (ind == _keys.end() || *ind != key)
         return false;
-    return true;
+    int index = (int) (ind - _keys.begin());
+    for (; index < (int)_keys.size() && _keys[index] == key; index++)
+        if (_rids[index].pageNum == rid.pageNum && _rids[index].slotNum == rid.slotNum)
+            return true;
+    return false;
 }
 
 
@@ -232,8 +251,11 @@ void LeafNode::split(){
 bool LeafNode::insert(AttrValue key, RID rid){
     //    cout<<"leaf node on page "<<_pgid<<endl;
     vector<AttrValue>::iterator ind = lower_bound(_keys.begin(), _keys.end(), key);
-    assert(ind == _keys.end() || *ind != key); //assume no same key multiple entries case.
     int i = (int)(ind - _keys.begin());
+    for (; ind != _keys.end() && *ind == key; ind++){
+        RID tmp =_rids[ind-_keys.begin()];
+        assert( tmp.pageNum != rid.pageNum || tmp.slotNum != rid.slotNum);
+    }
     _keys.insert(_keys.begin() + i, key);
     _rids.insert(_rids.begin() + i, rid);
     bool splitted = shouldSplit();
@@ -423,12 +445,17 @@ bool LeafNode::merge(){
 
 bool LeafNode::Delete(AttrValue av, RID rid, vector<AttrValue>::iterator pkey){
     int index = (int)(lower_bound(_keys.begin(), _keys.end(), av) - _keys.begin());
-    assert(_keys[index] == av);
-    assert(_rids[index] == rid);
+    for (; index < _keys.size() && _keys[index] == av; index++)
+        if (_rids[index] == rid)
+            break;
+    assert(index < (int) _keys.size() &&
+           _keys[index] == av && _rids[index] == rid);
     _keys.erase(_keys.begin() + index);
     _rids.erase(_rids.begin() + index);
-    if (!shouldMerge())
+    if (!shouldMerge()){
+        dump();
         return false;
+    }
     if (redistribute(pkey))
         return false;
     if (merge())
@@ -505,30 +532,30 @@ bool BTreeNode::Delete(AttrValue key, RID rid,vector<AttrValue>::iterator par_ke
     assert(index + 1 < (int)_childs.size());
     int &next = _childs[index+1];
     assert(next != EMPTY_NODE);
-    bool merge_with_right = false;
+    bool merge_with_right = false, merged = false;
     if (_depth == 1){
         LeafNode leaf(_fh, next);
-        if (leaf.Delete(key, rid, _keys.begin() + index))
+        if ((merged = leaf.Delete(key, rid, _keys.begin() + index)))
             merge_with_right = (_keys[index] <= leaf._keys[0]);
     }
     else{
         BTreeNode bnode(_fh, next);
-        if (bnode.Delete(key, rid, _keys.begin() + index)){
+        if ((merged=bnode.Delete(key, rid, _keys.begin() + index)))
             merge_with_right = _keys[index] <= bnode._keys[0];
-            if (merge_with_right){
-                _keys.erase(_keys.begin() + index + 1);
-                _childs.erase(_childs.begin() + index + 2);
-            }
-            else{
-                //remove previous _childs pointer, make current child pinter comes into effect
-                _childs.erase(_childs.begin() + index);
-//                cout<<"key size "<<_keys.size()<<" "<<index<<endl;
-                _keys.erase(_keys.begin() + index);
-            }
-        }
     }
-    if (!shouldMerge())
+    if (merged && merge_with_right){
+        _keys.erase(_keys.begin() + index + 1);
+        _childs.erase(_childs.begin() + index + 2);
+    }
+    else if (merged && !merge_with_right){
+        //remove previous _childs pointer, make current child pinter comes into effect
+        _childs.erase(_childs.begin() + index);
+        _keys.erase(_keys.begin() + index);
+    }
+    if (!shouldMerge()){
+        dump();
         return false;
+    }
     if (redistribute(par_key))
         return false;
     if (merge(par_key))
@@ -555,4 +582,41 @@ RC BTreeNode::rootDelete(const void *key, RID rid, BTreeNode * &newroot){
         newroot = this;
     return 0;
 }
+
+RC BTreeNode::getNextEntry(IX_ScanIterator &ix){
+    AttrValue last = ix._last_key, found;
+    RID rid;
+    int depth = _depth, next = _pgid, index;
+    do{
+        BTreeNode bnode(_fh, next);
+        index = (int)(upper_bound(bnode._keys.begin(), bnode._keys.end(), last) - bnode._keys.begin());
+        next = _childs[index];
+        depth = bnode._depth;
+    }while (depth > 1);
+    LeafNode leaf(_fh, next);
+    if (ix._rid.pageNum == 0)//using ix._rid whether equals to 0 to indicates whether it's first time to getNextEntry
+        index = (int)(lower_bound(leaf._keys.begin(), leaf._keys.end(), last) - leaf._keys.begin());
+    else
+        index = (int)(upper_bound(leaf._keys.begin(), leaf._keys.end(), last) - leaf._keys.begin());
+    if (index >= (int)leaf._keys.size()){
+        if (leaf._rightID == EMPTY_NODE)
+            return -1;
+        LeafNode right(_fh, leaf._rightID);
+        found = right._keys[0];
+        rid = right._rids[0];
+    }
+    else{
+        found = leaf._keys[index];
+        rid = leaf._rids[index];
+    }
+    if (!ix.isOK(found))
+        return -1;
+    ix._last_key = found;
+    ix._rid = rid;
+    return 0;
+}
+
+
+
+
 

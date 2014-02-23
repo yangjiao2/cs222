@@ -38,6 +38,8 @@ PagedFileManager::~PagedFileManager()
 
 
 fstream *PagedFileManager::get_fstream(string name){
+    if (_pf_open_files.find(name) == _pf_open_files.end())
+        cout<<name<<" not found"<<endl;
     assert(_pf_open_files.find(name) != _pf_open_files.end());
     return _pf_open_files[name];
 }
@@ -74,7 +76,7 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
     }
 	else
 		_pf_open_count[fn]++;
-	fileHandle._fh_name = fileName;
+	fileHandle._fh_name = fn;
 	return 0;
 }
 
@@ -90,6 +92,7 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
         _pf_open_files[fn]->close();
 		_pf_open_count.erase(fn);
         _pf_open_files.erase(fn);
+        cout<<fn<<" file closed"<<endl;
 	}
 	fileHandle._fh_name = "";
 	return 0;

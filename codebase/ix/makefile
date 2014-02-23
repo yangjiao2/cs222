@@ -33,4 +33,5 @@ clean:
 	$(MAKE) -C $(CODEROOT)/rbf clean
 
 test:
-	rm -rf Age_idx
+	rm -rf *_idx
+	./ixtest1

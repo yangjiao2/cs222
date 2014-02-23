@@ -47,6 +47,7 @@ public:
             bool        lowKeyInclusive,
             bool        highKeyInclusive,
             IX_ScanIterator &ix_ScanIterator);
+    RC getNextEntry(IX_ScanIterator &ix, void *key, RID &rid);
     
 protected:
     IndexManager   ();                            // Constructor
@@ -58,12 +59,34 @@ private:
 };
 
 class IX_ScanIterator {
+    friend class IndexManager;
+    friend class BTreeNode;
 public:
     IX_ScanIterator();  							// Constructor
     ~IX_ScanIterator(); 							// Destructor
     
     RC getNextEntry(RID &rid, void *key);  		// Get next matching entry
     RC close();             						// Terminate index scan
+private:
+    bool isOK(const AttrValue &val){
+        bool ok = true;
+        if (_low._len != 0)
+            ok &= _inc_low ? val >= _low : val > _low;
+        if (_high._len != 0)
+            ok &= _inc_high ? val <= _high : val < _high;
+        return ok;
+    }
+    
+private:
+    Attribute _attr;
+    //using _len == 0 indicates is infinity
+    AttrValue _low;
+    AttrValue _high;
+    bool _inc_low;
+    bool _inc_high;
+    FileHandle _fh;
+    AttrValue _last_key;
+    RID _rid;
 };
 
 // print out the error message for a given return code

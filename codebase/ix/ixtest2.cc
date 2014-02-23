@@ -53,12 +53,12 @@ int testCase_4B(const string &indexFileName, const Attribute &attribute)
         rid.pageNum = key;
         rid.slotNum = key+1;
 
-        rc = indexManager->insertEntry(fileHandle, attribute, &key, rid);
-        if(rc != success)
-        {
-            cout << "Failed Inserting Entry..." << endl;
-            goto error_close_index;
-        }
+//        rc = indexManager->insertEntry(fileHandle, attribute, &key, rid);
+//        if(rc != success)
+//        {
+//            cout << "Failed Inserting Entry..." << endl;
+//            goto error_close_index;
+//        }
         inRidPageNumSum += rid.pageNum;
     }
 

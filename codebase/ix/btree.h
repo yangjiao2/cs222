@@ -16,6 +16,8 @@ typedef enum {
 } BTResult;
 
 
+class IX_ScanIterator;
+
 class BTreeNode{
     friend class BTreeNode;
     friend class LeafNode;
@@ -29,6 +31,8 @@ public:
     bool find(AttrValue key, RID rid);
     RC rootInsert(const void *key, RID rid, BTreeNode * &newroot);
     RC rootDelete(const void *key, RID rid, BTreeNode * &newroot);
+    
+    RC getNextEntry(IX_ScanIterator &ix);
     
 private:
     void dump();

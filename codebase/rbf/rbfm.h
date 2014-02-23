@@ -71,7 +71,7 @@ inline bool operator==(const AttrValue& lhs, const AttrValue& rhs){
     lhs._iv == rhs._iv && lhs._sv == rhs._sv;}
 inline bool operator!=(const AttrValue& lhs, const AttrValue& rhs){return !operator==(lhs,rhs);}
 inline bool operator< (const AttrValue& lhs, const AttrValue& rhs){return lhs._fv < rhs._fv ||
-    lhs._iv < rhs._iv || lhs._sv < rhs._sv;}
+    lhs._iv < rhs._iv || lhs._sv < rhs._sv || (lhs._len == 0 && rhs._len != 0); } //this is for -infinity, _len = 0 means -inifinity
 inline bool operator> (const AttrValue& lhs, const AttrValue& rhs){return  operator< (rhs,lhs);}
 inline bool operator<=(const AttrValue& lhs, const AttrValue& rhs){return !operator> (lhs,rhs);}
 inline bool operator>=(const AttrValue& lhs, const AttrValue& rhs){return !operator< (lhs,rhs);}
