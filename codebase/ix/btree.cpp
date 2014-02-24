@@ -373,77 +373,7 @@ RC BTreeNode::rootInsert(const void *key, RID rid, BTreeNode * &newroot){
     return 0;
 }
 
-bool LeafNode::isSibling(int pgid, int &size){
-    if (pgid == EMPTY_NODE)
-        return false;
-    LeafNode sib(_fh, pgid);
-    size = sib.sizeOnDisk();
-    return sib._parentID == _parentID;
-}
-
-
-template <typename T>
-vector<T> concate_vectors(vector<T> &x, vector<T> &y) {
-    vector<T> z(x.size() + y.size());
-    z.insert(z.end(), x.begin(), x.end());
-    z.insert(z.end(), y.begin(), y.end());
-    return z;
-}
-
-//par_key pionts to current leafNode's corresponding parent's key entry
-bool LeafNode::redistribute(vector<AttrValue>::iterator par_key){
-    int sib_size = 0, sib_id = EMPTY_NODE, size = sizeOnDisk();
-    if (isSibling(_leftID, sib_size) && size + sib_size > PAGE_SIZE)
-        sib_id = _leftID;
-    else if (isSibling(_rightID, sib_size) && size + sib_size > PAGE_SIZE)
-        sib_id = _rightID;
-    if (sib_id == EMPTY_NODE)
-        return false;
-    
-    LeafNode sib(_fh, sib_id);
-    if (sib_id == _rightID){
-        _keys.push_back(sib._keys[0]);
-        _rids.push_back(sib._rids[0]);
-        sib._keys.erase(sib._keys.begin());
-        sib._rids.erase(sib._rids.begin());
-        *(par_key+1) = sib._keys[0];
-    }
-    else{
-        int index = (int)sib._keys.size() - 1;
-        _keys.insert(_keys.begin(), sib._keys[index]);
-        _rids.insert(_rids.begin(), sib._rids[index]);
-        sib._keys.erase(sib._keys.begin() + index);
-        sib._rids.erase(sib._rids.begin() + index);
-        *par_key = _keys[0];
-    }
-    dump();
-    return true;
-}
-
-
-//merge into current_child
-bool LeafNode::merge(){
-    int sib_size = 0, sib_id = EMPTY_NODE, size = sizeOnDisk();
-    if (isSibling(_leftID, sib_size) && sib_size + size <= PAGE_SIZE)
-        sib_id = _leftID;
-    else if (isSibling(_rightID, sib_size) && sib_size + size <= PAGE_SIZE)
-        sib_id = _rightID;
-    if (sib_id == EMPTY_NODE)
-        return false;
-    LeafNode sib(_fh, sib_id);
-    if (sib_id == _rightID){
-        _keys = concate_vectors<AttrValue>(_keys, sib._keys);
-        _rids = concate_vectors<RID>(_rids, sib._rids);
-    }
-    else{
-        _keys = concate_vectors<AttrValue>(sib._keys, _keys);
-        _rids = concate_vectors<RID>(sib._rids, _rids);
-    }
-    dump();
-    return true;
-}
-
-bool LeafNode::Delete(AttrValue av, RID rid, vector<AttrValue>::iterator pkey){
+void LeafNode::Delete(AttrValue av, RID rid){
     int index = (int)(lower_bound(_keys.begin(), _keys.end(), av) - _keys.begin());
     for (; index < _keys.size() && _keys[index] == av; index++)
         if (_rids[index] == rid)
@@ -452,117 +382,25 @@ bool LeafNode::Delete(AttrValue av, RID rid, vector<AttrValue>::iterator pkey){
            _keys[index] == av && _rids[index] == rid);
     _keys.erase(_keys.begin() + index);
     _rids.erase(_rids.begin() + index);
-    if (!shouldMerge()){
-        dump();
-        return false;
-    }
-    if (redistribute(pkey))
-        return false;
-    if (merge())
-        return true;
     dump();
-    //unable to redistribute or merge, just return, may occur due to lack of entries
-    return false;
-}
-
-bool BTreeNode::isSibling(int pgid, int &sib_size){
-    if (pgid == EMPTY_NODE)
-        return false;
-    BTreeNode bnode(_fh, pgid);
-    sib_size = bnode.sizeOnDisk();
-    return bnode._parentID == _parentID;
 }
 
 
-bool BTreeNode::redistribute(vector<AttrValue>::iterator par_key){
-    int sib_size = 0, sib_id = EMPTY_NODE, size = sizeOnDisk();
-    if (isSibling(_leftID, sib_size) && size + sib_size > PAGE_SIZE)
-        sib_id = _leftID;
-    else if (isSibling(_rightID, sib_size) && size + sib_size > PAGE_SIZE)
-        sib_id = _rightID;
-    if (sib_id == EMPTY_NODE)
-        return false;
-    BTreeNode bnode(_fh, sib_id);
-    if (sib_id == _leftID){
-        _keys.insert(_keys.begin(), *par_key);
-        _childs.insert(_childs.begin(), bnode._childs.back());
-        *par_key = bnode._keys.back();
-        bnode._childs.pop_back();
-        bnode._keys.pop_back();
-    }
-    else{
-        _keys.push_back(*(par_key + 1));
-        _childs.push_back(bnode._childs[0]);
-        *(par_key + 1) = bnode._keys[0];
-        bnode._childs.pop_back();
-        bnode._keys.pop_back();
-    }
-    dump();
-    return true;
-}
-
-
-//merge into current node
-bool BTreeNode::merge(vector<AttrValue>::iterator par_key){
-    int sib_size = 0, sib_id = EMPTY_NODE, size = sizeOnDisk();
-    if (isSibling(_leftID, sib_size) && size + sib_size <= PAGE_SIZE)
-        sib_id = _leftID;
-    else if (isSibling(_rightID, sib_size) && size + sib_size <= PAGE_SIZE)
-        sib_id = _rightID;
-    if (sib_id == EMPTY_NODE)
-        return false;
-    BTreeNode bnode(_fh, sib_id);
-    if (sib_id == _leftID){
-        _keys.insert(_keys.begin(), *par_key);
-        _keys = concate_vectors<AttrValue>(bnode._keys, _keys);
-        _childs = concate_vectors<int>(bnode._childs, _childs);
-    }
-    else{
-        _keys.insert(_keys.begin(), *(par_key+1));
-        bnode._keys = concate_vectors<AttrValue>(_keys, bnode._keys);
-        bnode._childs = concate_vectors<int>(_childs, bnode._childs);
-    }
-    dump();
-    return true;
-}
-
-bool BTreeNode::Delete(AttrValue key, RID rid,vector<AttrValue>::iterator par_key){
+void BTreeNode::Delete(AttrValue key, RID rid){
     //index points to less or equal key entry compare to key
     int index = (int)(upper_bound(_keys.begin(), _keys.end(), key) - _keys.begin()) - 1;
     assert(index + 1 < (int)_childs.size());
-    int &next = _childs[index+1];
+    int next = _childs[index+1];
     assert(next != EMPTY_NODE);
-    bool merge_with_right = false, merged = false;
     if (_depth == 1){
         LeafNode leaf(_fh, next);
-        if ((merged = leaf.Delete(key, rid, _keys.begin() + index)))
-            merge_with_right = (_keys[index] <= leaf._keys[0]);
+        leaf.Delete(key, rid);
     }
     else{
         BTreeNode bnode(_fh, next);
-        if ((merged=bnode.Delete(key, rid, _keys.begin() + index)))
-            merge_with_right = _keys[index] <= bnode._keys[0];
+        bnode.Delete(key, rid);
     }
-    if (merged && merge_with_right){
-        _keys.erase(_keys.begin() + index + 1);
-        _childs.erase(_childs.begin() + index + 2);
-    }
-    else if (merged && !merge_with_right){
-        //remove previous _childs pointer, make current child pinter comes into effect
-        _childs.erase(_childs.begin() + index);
-        _keys.erase(_keys.begin() + index);
-    }
-    if (!shouldMerge()){
-        dump();
-        return false;
-    }
-    if (redistribute(par_key))
-        return false;
-    if (merge(par_key))
-        return true;
-    //redistribute/merge call dump() inside of themselves
     dump();
-    return false;
 }
 
 
@@ -571,52 +409,47 @@ RC BTreeNode::rootDelete(const void *key, RID rid, BTreeNode * &newroot){
     vkey.readFromData(_type, (char*)key);
     if (!find(vkey, rid))
         return -1;
-    //modify newroot: only more than one layer, and key is empty
-    int index = (int)(upper_bound(_keys.begin(), _keys.end(), vkey) - _keys.begin()) - 1;
-    assert(index + 1 < (int) _childs.size());
-    int next = _childs[index + 1];
-    Delete(vkey, rid, _keys.begin() + index);
-    if (_depth > 1 && _keys.empty())
-        newroot = new BTreeNode(_fh, next);
-    else
-        newroot = this;
+    Delete(vkey, rid);
+    newroot = this;
     return 0;
 }
 
 RC BTreeNode::getNextEntry(IX_ScanIterator &ix){
     AttrValue last = ix._last_key, found;
-    RID rid;
-    int depth = _depth, next = _pgid, index;
+    int depth = _depth, next = _pgid, index, begin;
     do{
         BTreeNode bnode(_fh, next);
         index = (int)(upper_bound(bnode._keys.begin(), bnode._keys.end(), last) - bnode._keys.begin());
         next = _childs[index];
         depth = bnode._depth;
     }while (depth > 1);
-    LeafNode leaf(_fh, next);
-    if (ix._rid.pageNum == 0)//using ix._rid whether equals to 0 to indicates whether it's first time to getNextEntry
-        index = (int)(lower_bound(leaf._keys.begin(), leaf._keys.end(), last) - leaf._keys.begin());
-    else
-        index = (int)(upper_bound(leaf._keys.begin(), leaf._keys.end(), last) - leaf._keys.begin());
-    if (index >= (int)leaf._keys.size()){
-        if (leaf._rightID == EMPTY_NODE)
-            return -1;
-        LeafNode right(_fh, leaf._rightID);
-        found = right._keys[0];
-        rid = right._rids[0];
+    
+    while (next != EMPTY_NODE){
+        LeafNode leaf(_fh, next);
+        next = leaf._rightID;
+        
+        vector<AttrValue> &keys = leaf._keys;
+        vector<RID> &rids = leaf._rids;
+        bool found = false;
+        begin = index = (int)(lower_bound(keys.begin(), keys.end(), last) - keys.begin());
+        if (index >= (int) keys.size())
+            continue;
+        for (; index < (int)keys.size() && keys[index] == last; index++)
+            if (rids[index] == ix._rid){
+                found = true;
+                break;
+            }
+        index = found ? index + 1 : begin;
+        if (index >= (int) keys.size())
+            continue;
+        if (ix.isOK(keys[index])){
+            ix._last_key = keys[index];
+            ix._rid = rids[index];
+            return 0;
+        }
     }
-    else{
-        found = leaf._keys[index];
-        rid = leaf._rids[index];
-    }
-    if (!ix.isOK(found))
-        return -1;
-    ix._last_key = found;
-    ix._rid = rid;
-    return 0;
+    return -1;
 }
-
-
 
 
 
