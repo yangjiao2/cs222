@@ -2,7 +2,6 @@
 #include "ix.h"
 
 #define UNIT_SIZE (sizeof(int))
-
 #define pfm (PagedFileManager::instance())
 
 
@@ -17,6 +16,21 @@ vector<T> concate_vectors(vector<T> x, vector<T> y) {
     vector<T> z(x);
     z.insert(z.end(), y.begin(), y.end());
     return z;
+}
+
+void BTreeNode::setRootPageID(FileHandle &fh, int v){
+    char buffer[PAGE_SIZE];
+    memset(buffer, 0, sizeof(buffer));
+    memcpy(buffer, &v, UNIT_SIZE);
+    fh.writePage(0, buffer);
+}
+
+int BTreeNode::getRootPageID(FileHandle &fh){
+    char buffer[PAGE_SIZE];
+    fh.readPage(0, buffer);
+    int v;
+    memcpy(&v, buffer, UNIT_SIZE);
+    return v;
 }
 
 
@@ -61,7 +75,6 @@ BTreeNode::BTreeNode(FileHandle &fh, AttrType type, int dep){
     _fh.appendPage(_buffer);
     _pgid =  _fh.getNumberOfPages() - 1;
     _childs = vector<int>(1, EMPTY_NODE);
-    dump();
 }
 
 void BTreeNode::dump(){
@@ -147,7 +160,6 @@ LeafNode::LeafNode(FileHandle &fh, AttrType type){
     _leftID = _rightID = EMPTY_NODE;
     _fh.appendPage(_buffer);
     _pgid = _fh.getNumberOfPages() - 1;
-    dump();
 }
 
 //Note: dump() should not be eagerly called! As its size may greater than PAGE_SIZE, causing overwrite
@@ -220,8 +232,6 @@ void LeafNode::split(){
     copy(_rids.begin() + range, _rids.end(), nbr._rids.begin());
     _keys.erase(_keys.begin() + range, _keys.end());
     _rids.erase(_rids.begin() + range, _rids.end());
-    nbr.dump();
-    dump();
 }
 
 //return whether splitted
@@ -234,23 +244,17 @@ bool LeafNode::insert(AttrValue key, RID rid){
     }
     _keys.insert(_keys.begin() + i, key);
     _rids.insert(_rids.begin() + i, rid);
-//    dump(); bug!
-    if (!shouldSplit()){
-        dump();
+    if (!shouldSplit())
         return false;
-    }
     //try to spill
     if (_keys[0] == _keys.back()){
         spill(_keys.back(), _rids.back());
         _keys.pop_back();
         _rids.pop_back();
     }
-    if (!shouldSplit()){
-        dump();
+    if (!shouldSplit())
         return false;
-    }
     split();
-    dump();
     return true;
 }
 
@@ -260,7 +264,6 @@ AttrValue BTreeNode::pushupFirstKey(){
     AttrValue av = _keys[0];
     _keys.erase(_keys.begin());
     _childs.erase(_childs.begin());
-    dump();
     return av;
 }
 
@@ -285,7 +288,6 @@ void BTreeNode::split(){
     copy(_childs.begin() + range, _childs.end(), nbr._childs.begin());
     _keys.erase(_keys.begin() + range, _keys.end());
     _childs.erase(_childs.begin() + range + 1, _childs.end());
-    nbr.dump();
 }
 
 bool BTreeNode::insert(AttrValue key, RID rid){
@@ -322,7 +324,6 @@ bool BTreeNode::insert(AttrValue key, RID rid){
     bool splitted = shouldSplit();
     if (splitted)
         split();
-    dump();
     return splitted;
 }
 
@@ -342,8 +343,9 @@ RC BTreeNode::rootInsert(const void *key, RID rid, BTreeNode * &newroot){
         newroot->_childs.resize(2);
         newroot->_childs[0] = _pgid;
         newroot->_childs[1] = nbr._pgid;
-        newroot->dump();
+        setRootPageID(_fh, newroot->_pgid);
     }
+    newroot->dump();
     return 0;
 }
 
@@ -356,7 +358,6 @@ void LeafNode::Delete(AttrValue av, RID rid){
            _keys[index] == av && _rids[index] == rid);
     _keys.erase(_keys.begin() + index);
     _rids.erase(_rids.begin() + index);
-    dump();
 }
 
 
@@ -374,7 +375,6 @@ void BTreeNode::Delete(AttrValue key, RID rid){
         BTreeNode bnode(_fh, next);
         bnode.Delete(key, rid);
     }
-    dump();
 }
 
 
@@ -385,6 +385,7 @@ RC BTreeNode::rootDelete(const void *key, RID rid, BTreeNode * &newroot){
         return -1;
     Delete(vkey, rid);
     newroot = this;
+    newroot->dump();
     return 0;
 }
 
@@ -401,11 +402,9 @@ RC BTreeNode::getNextEntry(IX_ScanIterator &ix){
     while (next != EMPTY_NODE){
         LeafNode leaf(_fh, next);
         next = leaf._rightID;
-        
         vector<AttrValue> keys;
         vector<RID> rids;
         leaf.get_whole_entries(keys, rids);
-        
         bool found = false;
         begin = index = (int)(lower_bound(keys.begin(), keys.end(), last) - keys.begin());
         if (index >= (int) keys.size())
@@ -431,7 +430,6 @@ void LeafNode::spill(AttrValue key, RID rid){
     if (_nextID == EMPTY_NODE){
         LeafNode over(_fh, _type);
         _nextID = over._pgid;
-//        dump(); bug! may not splitted yet
     }
     LeafNode over(_fh, _nextID);
     int space = (int) PAGE_SIZE - over.sizeOnDisk();
@@ -441,7 +439,6 @@ void LeafNode::spill(AttrValue key, RID rid){
         over._keys.push_back(key);
         over._rids.push_back(rid);
     }
-    over.dump();
 }
 
 void LeafNode::get_whole_entries(vector<AttrValue> &keys, vector<RID> &rids){

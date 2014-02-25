@@ -2,13 +2,10 @@
 #include "ix.h"
 
 #define UNIT_SIZE (sizeof(int))
-
-IndexManager* IndexManager::_index_manager = 0;
-//static PagedFileManager *pfm;
-
 #define pfm (PagedFileManager::instance())
 #define idm (IndexManager::instance())
 
+IndexManager* IndexManager::_index_manager = 0;
 
 IndexManager* IndexManager::instance()
 {
@@ -56,28 +53,19 @@ RC IndexManager::checkRootMap(FileHandle &fh, const Attribute &attribute){
     char buffer[PAGE_SIZE];
     memset(buffer, 0, sizeof(buffer));
     string fname = fh._fh_name;
-    int rootID = 1;
     assert(fname != "");
-    
     if (rootsMap.find(fname) == rootsMap.end()){
-        if (fh.getNumberOfPages() != 0){
-            fh.readPage(0, buffer);
-            memcpy(&rootID, buffer, UNIT_SIZE);
-            rootsMap[fname] = new BTreeNode(fh, rootID);
-        }
-        //intialize: page0 root pointer, page 1 root page.
-        else{
-            memcpy(buffer, &rootID, UNIT_SIZE);
+        if (fh.getNumberOfPages() == 0){
             fh.appendPage(buffer);
-            rootsMap[fname] = new BTreeNode(fh, attribute.type, rootID);
+            BTreeNode::setRootPageID(fh, 1);
+            BTreeNode tmpRoot(fh, attribute.type, 1);
         }
+        rootsMap[fname] = new BTreeNode(fh, BTreeNode::getRootPageID(fh));
     }
     return rootsMap[fname]->getType() == attribute.type ? 0 : -1;
 }
 
-//TODO: return false if insert fail, could be duplicates: same key, multiple rids
 //only the first time insert, we know what type of BTreeNode, ft...
-
 RC IndexManager::insertEntry(FileHandle &fileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
     if (checkRootMap(fileHandle, attribute) != 0)

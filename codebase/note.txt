@@ -3,17 +3,8 @@ btree.cpp
 
 TODO:
 
-6) Analyze space ratio: 512K for 30000 entries, unreasonable.
-7) considering more _depth > 1's case,
-
-9) modify root position in page 0 if height changes
-
-11) If merge/split is of parent's responsibility, than no need to store parentID.
-12) when split, detect all same key on the page: return -1 or throw exception
-
-14) overflow page: LeafNode::passToOverflow(vector<..> ..); eat, continue
-15) getNextEntry(): combine overflow page first
-
+7) Testing large insert: causing _depth > 1, rootChange
+16) cleaning job before submit to instructor
 
 Done:
 
@@ -30,5 +21,13 @@ X 10) Not pass test case 8
 X 12) Considering case: same key, different rid: (key1, value1), (key1, value2), is OK, need to handle:
 
 X 13) parentID is not neccessary currently, as no merge/redistribute, just split
+
+X 11) If merge/split is of parent's responsibility, than no need to store parentID.
+X 12) when split, detect all same key on the page: return -1 or throw exception
+
+X 14) overflow page: LeafNode::passToOverflow(vector<..> ..); eat, continue
+X 15) getNextEntry(): combine overflow page first
+
+X 9) modify root position in page 0 if height changes
 
 */

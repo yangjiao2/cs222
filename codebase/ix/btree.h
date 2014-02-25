@@ -32,7 +32,9 @@ public:
     RC rootDelete(const void *key, RID rid, BTreeNode * &newroot);
     
     RC getNextEntry(IX_ScanIterator &ix);
-    
+    static void setRootPageID(FileHandle &fh, int v);
+    static int getRootPageID(FileHandle &fh);
+
 private:
     void dump();
     void split();
@@ -40,16 +42,10 @@ private:
     bool shouldSplit();
     bool shouldMerge();
     AttrValue pushupFirstKey();
-    
     //returning whether split, (key, rid) no duplicates
     bool insert(AttrValue key, RID rid);
-    
     //just leave it there
     void Delete(AttrValue key, RID rid);
-    
-    bool redistribute(vector<AttrValue>::iterator par_key);
-    bool merge(vector<AttrValue>::iterator par_key);
-    bool isSibling(int pgid, int &sib_size);
     
 private:
     int _leftID; //no need to load neighbourings in advance, we have id => BTreeNode constructor
@@ -69,6 +65,9 @@ class LeafNode{
 public:
     LeafNode(FileHandle &fh, int pageNum);
     LeafNode(FileHandle &fh, AttrType type); // new a new leaf node
+    ~LeafNode(){
+        dump();
+    }
     
 private:
     void dump();
@@ -98,8 +97,6 @@ private:
     char _buffer[PAGE_SIZE];
     FileHandle _fh;
 };
-
-
 
 #endif
 
