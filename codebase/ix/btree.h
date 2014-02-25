@@ -69,7 +69,6 @@ class LeafNode{
 public:
     LeafNode(FileHandle &fh, int pageNum);
     LeafNode(FileHandle &fh, AttrType type); // new a new leaf node
-    ~LeafNode();
     
 private:
     void dump();
@@ -79,14 +78,12 @@ private:
     void split();
     int sizeOnDisk();
     bool shouldSplit();
-    bool shouldMerge();
-    bool isSibling(int pgid, int &size);
-    
     //just leave it there
     void Delete(AttrValue av, RID rid);
-    
-    bool redistribute(vector<AttrValue>::iterator par_key);
-    bool merge();
+
+    void spill(AttrValue key, RID rid);
+    //get whole entries, including its overflow page
+    void get_whole_entries(vector<AttrValue> &keys, vector<RID> &rids);
     
 private:
     int _leftID;
