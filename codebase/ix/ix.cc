@@ -69,7 +69,7 @@ RC IndexManager::checkRootMap(FileHandle &fh, const Attribute &attribute){
         else{
             memcpy(buffer, &rootID, UNIT_SIZE);
             fh.appendPage(buffer);
-            rootsMap[fname] = new BTreeNode(fh, attribute.type, rootID, EMPTY_NODE);
+            rootsMap[fname] = new BTreeNode(fh, attribute.type, rootID);
         }
     }
     return rootsMap[fname]->getType() == attribute.type ? 0 : -1;

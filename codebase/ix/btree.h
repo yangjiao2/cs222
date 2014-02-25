@@ -19,11 +19,10 @@ typedef enum {
 class IX_ScanIterator;
 
 class BTreeNode{
-    friend class BTreeNode;
     friend class LeafNode;
 public:
     BTreeNode(FileHandle &fh, int pageNum);
-    BTreeNode(FileHandle &fh, AttrType _type, int dep, int parent);
+    BTreeNode(FileHandle &fh, AttrType _type, int dep);
     AttrType getType(){
         return _type;
     }
@@ -41,7 +40,6 @@ private:
     bool shouldSplit();
     bool shouldMerge();
     AttrValue pushupFirstKey();
-    void claimChilds();
     
     //returning whether split, (key, rid) no duplicates
     bool insert(AttrValue key, RID rid);
@@ -56,7 +54,6 @@ private:
 private:
     int _leftID; //no need to load neighbourings in advance, we have id => BTreeNode constructor
     int _rightID;
-    int _parentID;
     vector<AttrValue> _keys;
     vector<int> _childs;
     int _depth;
@@ -71,7 +68,7 @@ class LeafNode{
     friend class BTreeNode;
 public:
     LeafNode(FileHandle &fh, int pageNum);
-    LeafNode(BTreeNode *parent); // new a new leaf node
+    LeafNode(FileHandle &fh, AttrType type); // new a new leaf node
     ~LeafNode();
     
 private:
@@ -94,7 +91,7 @@ private:
 private:
     int _leftID;
     int _rightID;
-    int _parentID;
+    int _nextID; //overflow page id
     AttrType _type;
     int _pgid;
     

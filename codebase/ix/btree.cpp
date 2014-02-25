@@ -1,32 +1,8 @@
-/*
- TODO:
- X  1) ROOT_EMPTY, left and right node should be connected. other connected is achieved during split
- ANS: no need for special case, intialize root to empty _keys, 1 _childs. it would split automatically
- 
- X 2) BootNode Split: should reassign parent id to new splitted child, could factor into a method
- X 4) rootInsert(): should return failure, if duplicates
- 
- X 5) Delete(): ... trikcy, if merge, parent node design merge-with-right or merge-with left.
- X 12) Considering case: same key, different rid: (key1, value1), (key1, value2), is OK, need to handle:
- 
- 3) For Debug: output and check consistency: parent_pgid == page[child[i]]'s parent id, print out
- 6) Analyze space ratio: 512K for 30000 entries, unreasonable.
- 7) considering more _depth > 1's case,
- 8) Why ~LeafNode(){} calling dump() would crash testCase9()
- 9) modify root position in page 0 if height changes
- 10) Not pass test case 8
- 11) If merge/split is of parent's responsibility, than no need to store parentID.
- 12) when split, detect all same key on the page: return -1 or throw exception
- 
- */
-
-
 #include "btree.h"
 #include "ix.h"
 
 #define UNIT_SIZE (sizeof(int))
 
-//static PagedFileManager *pfm = PagedFileManager::instance();
 #define pfm (PagedFileManager::instance())
 
 
@@ -38,16 +14,15 @@ BTreeNode::~BTreeNode(){
 BTreeNode::BTreeNode(FileHandle &fh, int pageNum){
     fh.readPage(pageNum, _buffer);
     pfm->openFile(fh._fh_name.c_str(), _fh);
-    int N, arr[6], offset = PAGE_SIZE - 4;
+    int N, arr[5], offset = PAGE_SIZE - 4;
     
     for (int i = 0; i < 6; offset -= 4, i++)
         memcpy(&arr[i], _buffer + offset, sizeof(int));
     N = arr[0];
     _leftID = arr[1];
     _rightID = arr[2];
-    _parentID = arr[3];
-    _type = (AttrType)arr[4];
-    _depth = arr[5];
+    _type = (AttrType)arr[3];
+    _depth = arr[4];
     _pgid = pageNum;
     
     AttrValue av;
@@ -63,10 +38,9 @@ BTreeNode::BTreeNode(FileHandle &fh, int pageNum){
     memcpy(&_childs[N], _buffer + offset, UNIT_SIZE);
 }
 
-BTreeNode::BTreeNode(FileHandle &fh, AttrType type, int dep, int parent){
+BTreeNode::BTreeNode(FileHandle &fh, AttrType type, int dep){
     pfm->openFile(fh._fh_name.c_str(), _fh);
     memset(_buffer, 0, sizeof(_buffer));
-    _parentID = parent;
     _depth = dep;
     _type = type;
     _leftID = _rightID = EMPTY_NODE;
@@ -81,9 +55,8 @@ void BTreeNode::dump(){
     arr[0] = N;
     arr[1] = _leftID;
     arr[2] = _rightID;
-    arr[3] = _parentID;
-    arr[4] = (int) _type;
-    arr[5] = _depth;
+    arr[3] = (int) _type;
+    arr[4] = _depth;
     int offset = PAGE_SIZE - 4;
     for (int i = 0; i < 6; offset -= 4, i++)
         memcpy(_buffer + offset, &arr[i], sizeof(int));
@@ -129,8 +102,6 @@ bool BTreeNode::find(AttrValue key, RID rid){
 
 
 LeafNode::~LeafNode(){
-    //    cout<<_fh._fh_name<<" loper"<<endl;
-    //    assert(_fh._fh_name.find('?') == string::npos);
     //TODO: investigae why this could not be called? would result testCase9 fail
     //    dump();
     pfm->closeFile(_fh);
@@ -146,7 +117,7 @@ LeafNode::LeafNode(FileHandle &fh, int pageNum){
     N = arr[0];
     _leftID = arr[1];
     _rightID = arr[2];
-    _parentID = arr[3];
+    _nextID = arr[3];
     _type = (AttrType) arr[4];
     _pgid = pageNum;
     _rids.resize(N);
@@ -163,11 +134,10 @@ LeafNode::LeafNode(FileHandle &fh, int pageNum){
 
 
 //Note: calling
-LeafNode::LeafNode(BTreeNode *parent){
-    assert(parent);
-    pfm->openFile(parent->_fh._fh_name.c_str(), _fh);
-    _parentID = parent->_pgid;
-    _type = parent->_type;
+LeafNode::LeafNode(FileHandle &fh, AttrType type){
+    pfm->openFile(fh._fh_name.c_str(), _fh);
+    _nextID = EMPTY_NODE;
+    _type = type;
     _leftID = _rightID = EMPTY_NODE;
     _fh.appendPage(_buffer);
     _pgid = _fh.getNumberOfPages() - 1;
@@ -179,7 +149,7 @@ void LeafNode::dump(){
     arr[0] = N;
     arr[1] = _leftID;
     arr[2] = _rightID;
-    arr[3] = _parentID;
+    arr[3] = _nextID;
     arr[4] = _type;
     int offset = PAGE_SIZE - 4;
     for (int i = 0; i < 5; i++, offset -= 4)
@@ -191,7 +161,6 @@ void LeafNode::dump(){
         memcpy(_buffer + offset + 4, &_rids[i].slotNum, sizeof(int));
         offset += 8;
     }
-    //    cout<<"finish dump"<<endl;
     _fh.writePage(_pgid, _buffer);
 }
 
@@ -233,8 +202,7 @@ void LeafNode::split(){
     assert(shouldSplit());
     int N = (int) _keys.size();
     int range = N / 2;
-    BTreeNode parent(_fh, _parentID);
-    LeafNode nbr(&parent);
+    LeafNode nbr(_fh, _type);
     nbr._leftID = _pgid;
     nbr._rightID = _rightID;
     _rightID = nbr._pgid;
@@ -278,17 +246,6 @@ AttrValue BTreeNode::pushupFirstKey(){
 }
 
 
-void BTreeNode::claimChilds(){
-    int N = (int) _childs.size();
-    char buffer[PAGE_SIZE];
-    for (int i = 0; i < N; i++)
-        if (_childs[i] != EMPTY_NODE){
-            _fh.readPage(_childs[i], buffer);
-            memcpy(buffer + PAGE_SIZE - 4 * UNIT_SIZE, &_pgid, UNIT_SIZE); //offset works no matter LeafNode or BTreeNode
-            _fh.writePage(_childs[i], buffer);
-        }
-}
-
 /*
  current node   =>      _keys: [0, range),      _childs: [0, range] = [0, range + 1)
  new splitted   =>      _keys: [range, end)     _childs: [range, end')
@@ -299,7 +256,7 @@ void BTreeNode::split(){
     assert(shouldSplit());
     int N = (int)_keys.size();
     int range = N / 2;
-    BTreeNode nbr(_fh,_type, _depth, _parentID);
+    BTreeNode nbr(_fh,_type, _depth);
     nbr._keys.resize(N - range);
     nbr._childs.resize(N - range + 1);
     nbr._leftID = _pgid;
@@ -309,7 +266,6 @@ void BTreeNode::split(){
     copy(_childs.begin() + range, _childs.end(), nbr._childs.begin());
     _keys.erase(_keys.begin() + range, _keys.end());
     _childs.erase(_childs.begin() + range + 1, _childs.end());
-    nbr.claimChilds();
     nbr.dump();
 }
 
@@ -322,7 +278,7 @@ bool BTreeNode::insert(AttrValue key, RID rid){
     int &next = _childs[index];
     if (_depth == 1) {
         if (next == EMPTY_NODE){
-            LeafNode leaf(this);
+            LeafNode leaf(_fh, _type);
             leaf.insert(key, rid);
             next = leaf._pgid;
             return false;
@@ -361,13 +317,12 @@ RC BTreeNode::rootInsert(const void *key, RID rid, BTreeNode * &newroot){
         newroot = this;
     }
     else{
-        newroot = new BTreeNode(_fh,  _type, _depth + 1, EMPTY_NODE);
+        newroot = new BTreeNode(_fh,  _type, _depth + 1);
         BTreeNode nbr(_fh, _rightID);
         newroot->_keys.resize(1, nbr.pushupFirstKey());
         newroot->_childs.resize(2);
         newroot->_childs[0] = _pgid;
         newroot->_childs[1] = nbr._pgid;
-        newroot->claimChilds();
         newroot->dump();
     }
     return 0;
