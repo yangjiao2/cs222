@@ -198,6 +198,7 @@ int LeafNode::sizeOnDisk(){
 
 bool LeafNode::shouldSplit(){
     return sizeOnDisk() >= PAGE_SIZE;
+//    return _keys.size() > 4;
 }
 AttrValue LeafNode::firstKeyValue(){
     assert(!_keys.empty());
@@ -344,6 +345,8 @@ RC BTreeNode::rootInsert(const void *key, RID rid, BTreeNode * &newroot){
         newroot->_childs[0] = _pgid;
         newroot->_childs[1] = nbr._pgid;
         setRootPageID(_fh, newroot->_pgid);
+        cout<<"root splitted: "<<_depth + 1<<endl;
+        dump();
     }
     newroot->dump();
     return 0;
@@ -395,7 +398,7 @@ RC BTreeNode::getNextEntry(IX_ScanIterator &ix){
     do{
         BTreeNode bnode(_fh, next);
         index = (int)(upper_bound(bnode._keys.begin(), bnode._keys.end(), last) - bnode._keys.begin());
-        next = _childs[index];
+        next = bnode._childs[index];
         depth = bnode._depth;
     }while (depth > 1);
 

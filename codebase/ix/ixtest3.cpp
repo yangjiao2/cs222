@@ -853,6 +853,10 @@ error_return:
 }
 
 
+#define T_NUM 3000000
+#define S_NUM 2000000
+int A[T_NUM];
+int B[S_NUM];
 int testCase_9(const string &indexFileName, const Attribute &attribute)
 {
     // Functions tested
@@ -874,8 +878,6 @@ int testCase_9(const string &indexFileName, const Attribute &attribute)
     IX_ScanIterator ix_ScanIterator;
     int compVal;
     int numOfTuples;
-    int A[30000];
-    int B[20000];
     int count = 0;
     int key;
     
@@ -904,7 +906,7 @@ int testCase_9(const string &indexFileName, const Attribute &attribute)
     }
     
     // insert entry
-    numOfTuples = 30000;
+    numOfTuples = T_NUM;
     for(int i = 0; i < numOfTuples; i++)
     {
         A[i] = i;
@@ -923,10 +925,12 @@ int testCase_9(const string &indexFileName, const Attribute &attribute)
             cout << "Failed Inserting Keys..." << endl;
             goto error_close_index;
         }
+        if (i % ((T_NUM - S_NUM)/10) == 0)
+            cout<<"successfully inserted "<<i<<endl;
     }
     
     //scan
-    compVal = 20000;
+    compVal = S_NUM;
     rc = indexManager->scan(fileHandle, attribute, NULL, &compVal, true, true, ix_ScanIterator);
     if(rc == success)
     {
@@ -942,7 +946,7 @@ int testCase_9(const string &indexFileName, const Attribute &attribute)
     count = 0;
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
-        if(count % 1000 == 0)
+        if(count % (T_NUM - S_NUM)/10 == 0)
             cout << rid.pageNum << " " << rid.slotNum << endl;
         
         key = A[rid.pageNum-1];
@@ -956,7 +960,7 @@ int testCase_9(const string &indexFileName, const Attribute &attribute)
         count++;
     }
     cout << "Number of deleted entries: " << count << endl;
-    if (count != 20001)
+    if (count != S_NUM + 1)
     {
         cout << "Wrong entries output...failure" << endl;
         goto error_close_scan;
@@ -975,18 +979,18 @@ int testCase_9(const string &indexFileName, const Attribute &attribute)
     }
     
     // insert entry Again
-    numOfTuples = 20000;
+    numOfTuples = S_NUM;
     for(int i = 0; i < numOfTuples; i++)
     {
-        B[i] = 30000+i;
+        B[i] = T_NUM+i;
     }
     random_shuffle(B, B+numOfTuples);
     
     for(int i = 0; i < numOfTuples; i++)
     {
         key = B[i];
-        rid.pageNum = i+30001;
-        rid.slotNum = i+30001;
+        rid.pageNum = i+T_NUM + 1;
+        rid.slotNum = i+T_NUM + 1;
         
         rc = indexManager->insertEntry(fileHandle, attribute, &key, rid);
         if(rc != success)
@@ -994,10 +998,12 @@ int testCase_9(const string &indexFileName, const Attribute &attribute)
             cout << "Failed Inserting Keys..." << endl;
             goto error_close_index;
         }
+        if (i % ((T_NUM - S_NUM)/10) == 0)
+            cout<<"successfully inserted "<<i<<endl;
     }
     
     //scan
-    compVal = 35000;
+    compVal = T_NUM + (T_NUM - S_NUM) / 2;
     rc = indexManager->scan(fileHandle, attribute, NULL, &compVal, true, true, ix_ScanIterator);
     if(rc == success)
     {
@@ -1012,10 +1018,10 @@ int testCase_9(const string &indexFileName, const Attribute &attribute)
     count = 0;
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
-        if (count % 1000 == 0)
+        if (count % (T_NUM - S_NUM)/10 == 0)
             cout << rid.pageNum << " " << rid.slotNum << endl;
         
-        if(rid.pageNum > 30000 && B[rid.pageNum-30001] > 35000)
+        if(rid.pageNum > T_NUM && B[rid.pageNum-T_NUM-1] > T_NUM + (T_NUM - S_NUM) / 2)
         {
             cout << "Wrong entries output...failure" << endl;
             goto error_close_scan;
