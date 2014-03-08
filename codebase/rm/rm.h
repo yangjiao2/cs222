@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <set>
 
 #include "../rbf/rbfm.h"
 
@@ -11,7 +12,9 @@
 
 #define RM_CATALOG_NAME "catalog"
 #define RM_ATTRIBUTES_NAME "attributes"
+#define RM_INDEX_NAME "index_table"
 #define RM_TABLE_FILENAME(x) (x) //table file name is same as table name
+#define RM_INDEX_FILENAME(tb,attr) (tb+"."+attr)
 
 
 
@@ -30,7 +33,6 @@ class RM_ScanIterator {
 public:
     RM_ScanIterator() {};
     ~RM_ScanIterator() {
-//        cout<<"scanner's desconstructor"<<endl;
         close();
     };
     
@@ -42,6 +44,17 @@ public:
     friend class RelationManager;
 private:
     RBFM_ScanIterator _rmsi;
+};
+
+
+class RM_IndexScanIterator {
+public:
+    RM_IndexScanIterator() {};  	// Constructor
+    ~RM_IndexScanIterator() {}; 	// Destructor
+    
+    // "key" follows the same format as in IndexManager::insertEntry()
+    RC getNextEntry(RID &rid, void *key) {return RM_EOF;};  	// Get next matching entry
+    RC close() {return -1;};             			// Terminate index scan
 };
 
 
@@ -82,12 +95,29 @@ public:
     string tid_to_tbname(int tid);
     
     
+    RC createIndex(const string &tableName, const string &attributeName);
+    
+    RC destroyIndex(const string &tableName, const string &attributeName);
+    
+    // indexScan returns an iterator to allow the caller to go through qualified entries in index
+    RC indexScan(const string &tableName,
+                 const string &attributeName,
+                 const void *lowKey,
+                 const void *highKey,
+                 bool lowKeyInclusive,
+                 bool highKeyInclusive,
+                 RM_IndexScanIterator &rm_IndexScanIterator);
+    
+    
 private:
     vector<Attribute> prepareCatalogDescriptor(void);
     vector<Attribute> prepareAttrDescriptor(void);
+    vector<Attribute> prepareIndexDescriptor(void);
     
     int prepareCatalogData(string tableName, char *data);
     int prepareAttrData(string tableName, Attribute attr, char *data);
+    int prepareIndexData(string tablename, string attribute, char *data);
+    
     void RetrieveMetaInfo(void);
     
     
@@ -110,8 +140,11 @@ private:
     RecordBasedFileManager *rbfm;
     FileHandle catalog_fh;
     FileHandle attr_fh;
+    FileHandle index_fh;
+
     std::map<string, int> tbname_to_id;//table name to id
     std::map<string, vector<Attribute> > tbname_to_desp; //table name to descriptor
+    std::map<string, set<string> > tbname_to_indices; //table name to associated indices, set<> contains attribute name, not index_file name
     int _new_tbid;
 };
 

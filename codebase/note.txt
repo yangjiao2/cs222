@@ -1,3 +1,18 @@
+============================
+Part 4.1
+
+1) for each table's index relationship, add a new table to store this. load info into map-based data structure.
+
+Part 4.2
+
+1) numOfPages: identified avaliable pages to use when doing query processing. using malloc in constructor, reclaim
+   memory at deconstructor
+
+
+
+
+
+
 /*
 btree.cpp
 

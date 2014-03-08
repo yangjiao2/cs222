@@ -92,7 +92,6 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
         _pf_open_files[fn]->close();
 		_pf_open_count.erase(fn);
         _pf_open_files.erase(fn);
-        cout<<fn<<" file closed"<<endl;
 	}
 	fileHandle._fh_name = "";
 	return 0;

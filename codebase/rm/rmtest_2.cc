@@ -701,7 +701,7 @@ void Tests()
     memProfile();
     
     createTable("tbl_employee5");
-    rc = testRMLayer("tbl_employee5");
+//    rc = testRMLayer("tbl_employee5");
     if (rc == 0) {
         total += 16;
     }

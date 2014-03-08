@@ -10,6 +10,13 @@ char const *attrs_attr_name[] = {"tableID", "colum_name", "colum_type", "colum_l
 const AttrType attrs_attr_type[4] = {TypeInt, TypeVarChar, TypeInt, TypeInt};
 const int attrs_attr_len[4] = {4, 30, 4, 4};
 
+
+char const *index_attr_name[] = {"tableName", "attrName", "indexName"};
+const AttrType index_attr_type[] = {TypeVarChar, TypeVarChar, TypeVarChar};
+const int index_attr_len[] = {30,30,30};
+
+
+
 #define TABLE_EXIST_CHECK(x) \
 if (tbname_to_desp.find(x) == tbname_to_desp.end()) return -1;
 
@@ -52,27 +59,21 @@ vector<Attribute> RelationManager::prepareAttrDescriptor(void){
     return dp;
 }
 
+vector<Attribute> RelationManager::prepareIndexDescriptor(){
+    vector<Attribute> dp;
+    for (int i = 0; i < 3; i++)
+        dp.push_back(Attribute(index_attr_name[i], index_attr_type[i],
+                               index_attr_len[i]));
+    return dp;
+}
+
 //caller is responsible for allocating tableid
 int RelationManager::prepareCatalogData(string tableName, char *data){
     assert(tbname_to_id.find(tableName) != tbname_to_id.end());
-    int id = tbname_to_id[tableName], offset = 0, len = 0;
+    int id = tbname_to_id[tableName];
     string fileName = RM_TABLE_FILENAME(tableName);
-    
-    memcpy(data, &id, sizeof(int));
-    offset += sizeof(int);
-    
-    len = (int)tableName.length();
-    memcpy(data + offset, &len, sizeof(int));
-    offset += sizeof(int);
-    memcpy(data + offset, tableName.c_str(), len);
-    offset += len;
-    
-    len = (int)fileName.length();
-    memcpy(data + offset, &len, sizeof(int));
-    offset += sizeof(int);
-    memcpy(data + offset, fileName.c_str(), len);
-    offset += len;
-    
+    ValueStream vs(data);
+    vs<<id<<tableName<<fileName;
     return 0;
 }
 
@@ -82,26 +83,18 @@ int RelationManager::prepareAttrData(string tableName, Attribute attr, char *dat
     string column_name = attr.name;
     int column_type = (int)attr.type;
     int column_len = attr.length;
-    int offset = 0, len = 0;
-    
-    memcpy(data, &id, sizeof(int));
-    offset += sizeof(int);
-    
-    len = (int)column_name.length();
-    memcpy(data + offset, &len, sizeof(int));
-    offset += sizeof(int);
-    memcpy(data + offset, column_name.c_str(), len);
-    offset += len;
-
-    
-    memcpy(data + offset, &column_type, sizeof(int));
-    offset += sizeof(int);
-    
-    memcpy(data + offset, &column_len, sizeof(int));
-    offset += sizeof(int);
-    
+    ValueStream vs(data);
+    vs<<id<<column_name<<column_type<<column_len;
     return 0;
 }
+
+int RelationManager::prepareIndexData(string tablename, string attribute, char *data){
+    TABLE_EXIST_CHECK(tablename);
+    ValueStream vs(data);
+    vs<<tablename<<attribute<<RM_INDEX_FILENAME(tablename, attribute);
+    return 0;
+}
+
 
 //retrieve all meta info for all table, fill in map data structre
 //scan the whole file, set _new_tbid
@@ -114,30 +107,24 @@ void RelationManager::RetrieveMetaInfo(){
     rbfm->scan(catalog_fh, prepareCatalogDescriptor(), "", NO_OP, NULL, projected, rsi);
     AttrValue av;
     while (rsi.getNextRecord(rid, data) != -1) {
-        int offset = 0;
-        offset += av.readFromData(TypeInt, data);
-        int tid = av._iv;
-        offset += av.readFromData(TypeVarChar, data + offset);
-        string tname = av._sv;
+        ValueStream vs(data);
+        string tname;
+        int tid;
+        vs>>tid>>tname;
         tbname_to_id[tname] = tid;
         _new_tbid = max(_new_tbid, tid + 1);
     }
     rsi.close();
+    
+    //fill in tbname_to_desp from attribute table
     projected.assign(attrs_attr_name, attrs_attr_name + 4);
     rbfm->scan(attr_fh, prepareAttrDescriptor(), "", NO_OP, NULL, projected, rsi);
     while (rsi.getNextRecord(rid, data) != -1) {
-        int offset = 0;
-        offset += av.readFromData(TypeInt, data + offset);
-        int tid = av._iv;
-        offset += av.readFromData(TypeVarChar, data + offset);
-        string colname = av._sv;
-        offset += av.readFromData(TypeInt, data + offset);
-        int coltype = av._iv;
-        offset += av.readFromData(TypeInt, data + offset);
-        int collen = av._iv;
+        int tid, coltype, collen;
+        string colname;
+        ValueStream vs(data);
+        vs>>tid>>colname>>coltype>>collen;
         string tname = tid_to_tbname(tid);
-        if (tname == RM_CATALOG_NAME || tname == RM_ATTRIBUTES_NAME)
-            continue;
         Attribute attr(colname, (AttrType)coltype, (AttrLength)collen);
         vector<Attribute> desp;
         if (tbname_to_desp.find(tname) != tbname_to_desp.end())
@@ -145,31 +132,46 @@ void RelationManager::RetrieveMetaInfo(){
         desp.push_back(attr);
         tbname_to_desp[tname] = desp;
     }
+    rsi.close();
+    
+    //fill in tbname_to_indices from index_table file
+    projected.assign(index_attr_name, index_attr_name+3);
+    rbfm->scan(index_fh, prepareIndexDescriptor(), "", NO_OP, NULL, projected, rsi);
+    while (rsi.getNextRecord(rid, data) != -1) {
+        int offset = 0;
+        offset += av.readFromData(TypeVarChar, data);
+        string tname = av._sv;
+        offset += av.readFromData(TypeVarChar, data + offset);
+        string attribute = av._sv;
+        tbname_to_indices[tname].insert(attribute);
+    }
+    rsi.close();
 }
 
 RelationManager::RelationManager()
 {
     rbfm = RecordBasedFileManager::instance();
     _new_tbid = 1;
-    int nofiles = 0;
+    //only first time run db would call this, so no need to RetriveMetaInfo
     if (-1 == rbfm->openFile(RM_CATALOG_NAME, catalog_fh)){
         rbfm->createFile(RM_CATALOG_NAME);
-        rbfm->openFile(RM_CATALOG_NAME, catalog_fh);
-        nofiles++;
-    }
-    if (-1 == rbfm->openFile(RM_ATTRIBUTES_NAME, attr_fh)){
         rbfm->createFile(RM_ATTRIBUTES_NAME);
+        rbfm->createFile(RM_INDEX_NAME);
+        
+        rbfm->openFile(RM_CATALOG_NAME, catalog_fh);
         rbfm->openFile(RM_ATTRIBUTES_NAME, attr_fh);
-        nofiles++;
-    }
-    assert(nofiles == 0 || nofiles == 2);
-    if (nofiles == 2){
+        rbfm->openFile(RM_INDEX_NAME, index_fh);
+        
         createTable(RM_CATALOG_NAME, prepareCatalogDescriptor());
         createTable(RM_ATTRIBUTES_NAME, prepareAttrDescriptor());
+        createTable(RM_INDEX_NAME, prepareIndexDescriptor());
     }
-    tbname_to_desp[RM_CATALOG_NAME] = prepareCatalogDescriptor();
-    tbname_to_desp[RM_ATTRIBUTES_NAME] = prepareAttrDescriptor();
-    RetrieveMetaInfo();
+    else{
+        rbfm->openFile(RM_CATALOG_NAME, catalog_fh);
+        rbfm->openFile(RM_ATTRIBUTES_NAME, attr_fh);
+        rbfm->openFile(RM_INDEX_NAME, index_fh);
+        RetrieveMetaInfo();
+    }
 }
 
 RelationManager::~RelationManager()
@@ -178,12 +180,14 @@ RelationManager::~RelationManager()
 
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
-    if (tbname_to_desp.find(tableName) != tbname_to_desp.end())
+    if (tbname_to_desp.find(tableName) != tbname_to_desp.end()){
+        cout<<"this table exits"<<endl;
         return -1;
+    }
     char data[PAGE_SIZE];
     string tb_fn = RM_TABLE_FILENAME(tableName);
     RID rid;
-    if (tableName != RM_ATTRIBUTES_NAME && tableName != RM_CATALOG_NAME)
+    if (tableName != RM_ATTRIBUTES_NAME && tableName != RM_CATALOG_NAME && tableName != RM_INDEX_NAME)
         rbfm->createFile(tb_fn);
     tbname_to_id[tableName] = _new_tbid++;
     tbname_to_desp[tableName] = attrs;
@@ -191,7 +195,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     rbfm->insertRecord(catalog_fh, prepareCatalogDescriptor(), data, rid);
     for (int i = 0; i < attrs.size(); i++) {
         prepareAttrData(tableName, attrs[i], data);
-        rbfm->insertRecord(attr_fh, prepareAttrDescriptor(), data, rid);
+        rbfm->insertRecord(attr_fh, prepareAttrDescriptor(), data, rid);//why using insertTuple would fail
     }
     return 0;
 }
@@ -210,7 +214,8 @@ RC RelationManager::deleteTable(const string &tableName)
     attrNames[0] = tableName;
     memcpy(value, &len, sizeof(int));
     memcpy(value + sizeof(int), tableName.c_str(), len);
-    cout<<"scanned result is  "<<scan(RM_CATALOG_NAME, "tableName", EQ_OP, value, attrNames, rsi)<<endl;
+    assert(scan(RM_CATALOG_NAME, "tableName", EQ_OP, value, attrNames, rsi) != -1);
+
     rsi.getNextTuple(rid, data);
     deleteTuple(RM_CATALOG_NAME, rid);
     attrNames[0] = "tableID";
@@ -240,8 +245,6 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 
 RC RelationManager::deleteTuples(const string &tableName)
 {
-    if (tbname_to_desp.find(RM_CATALOG_NAME) == tbname_to_desp.end())
-        cout<<"not find catalog in deleteTuples"<<endl;
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
@@ -283,8 +286,6 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 
 RC RelationManager::reorganizePage(const string &tableName, const unsigned pageNumber)
 {
-    if (tbname_to_desp.find(RM_CATALOG_NAME) == tbname_to_desp.end())
-        cout<<"not find catalog in reorganizePage"<<endl;
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(tableName, fh);
@@ -303,11 +304,15 @@ RC RelationManager::scan(const string &tableName,
                          const vector<string> &attributeNames,
                          RM_ScanIterator &rm_ScanIterator)
 {
+    if (tbname_to_desp.find(tableName) == tbname_to_desp.end()){
+        cout<<tableName<< " not exits"<<endl;
+        return -1;
+    }
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
     return rbfm->scan(fh, tbname_to_desp[tableName], conditionAttribute, compOp, value,
-               attributeNames, rm_ScanIterator._rmsi);
+                      attributeNames, rm_ScanIterator._rmsi);
 }
 
 // Extra credit
@@ -327,3 +332,40 @@ RC RelationManager::reorganizeTable(const string &tableName)
 {
     return -1;
 }
+
+
+//========================
+// Index Creation
+//========================
+
+RC RelationManager::createIndex(const string &tableName, const string &attributeName){
+    TABLE_EXIST_CHECK(tableName);
+    set<string> &iset = tbname_to_indices[tableName];
+    if (iset.find(attributeName) != iset.end())
+        return -1;
+    char data[PAGE_SIZE];
+    RID rid;
+    prepareIndexData(tableName, attributeName, data);
+    return -1;
+}
+
+RC RelationManager::destroyIndex(const string &tableName, const string &attributeName){
+    TABLE_EXIST_CHECK(tableName);
+    return -1;
+}
+
+// indexScan returns an iterator to allow the caller to go through qualified entries in index
+RC RelationManager::indexScan(const string &tableName,
+                              const string &attributeName,
+                              const void *lowKey,
+                              const void *highKey,
+                              bool lowKeyInclusive,
+                              bool highKeyInclusive,
+                              RM_IndexScanIterator &rm_IndexScanIterator){
+    TABLE_EXIST_CHECK(tableName);
+    return -1;
+}
+
+
+
+

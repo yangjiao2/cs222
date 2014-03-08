@@ -201,4 +201,67 @@ private:
 };
 
 
+class ValueStream{
+public:
+    ValueStream(char *data = NULL): _data(data), _offset(0){}
+    ~ValueStream(){
+    }
+    ValueStream& operator<<(int v){
+        memcpy(get_pos(), &v, sizeof(int));
+        _offset += sizeof(int);
+        return *this;
+    }
+    ValueStream& operator<<(float v){
+        memcpy(get_pos(), &v, sizeof(float));
+        _offset += sizeof(float);
+        return *this;
+    }
+    ValueStream& operator<<(double v){
+        return (*this)<<((float)v);
+    }
+    ValueStream& operator<<(string s){
+        int len = (int)s.length();
+        (*this)<<len;
+        memcpy(get_pos(), s.c_str(), len);
+        _offset += len;
+        return *this;
+    }
+    ValueStream& operator>>(int &v){
+        int tmp;
+        memcpy(&tmp, get_pos(), sizeof(int));
+        v = tmp;
+        _offset += sizeof(int);
+        return *this;
+    }
+    ValueStream& operator>>(float &v){
+        float tmp;
+        memcpy(&tmp, get_pos(), sizeof(int));
+        v = tmp;
+        _offset += sizeof(float);
+        return *this;
+    }
+    ValueStream& operator>>(string &s){
+        int len;
+        (*this)>>len;
+        char str[4096] = {'\0'};
+        memcpy(str, get_pos(), len);
+        s = string(str);
+        _offset += len;
+        return *this;
+    }
+    ValueStream& set_offset(int off){
+        _offset = off;
+        return *this;
+    }
+    char *get_pointer(){
+        return _data;
+    }
+private:
+    char *get_pos(){
+        return _data + _offset;
+    }
+    char *_data;
+    int _offset;
+};
+
 #endif

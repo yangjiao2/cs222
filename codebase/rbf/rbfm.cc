@@ -161,6 +161,7 @@ RC RecordBasedFileManager::getNextRecord(RBFM_ScanIterator &rs, void *data){
 
 
 RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
+    assert(_fh._fh_name != "");
     RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
     if (rbfm->getNextRecord(*this, data) == -1)
         return -1;

@@ -35,3 +35,7 @@ $(CODEROOT)/rbf/librbf.a:
 clean:
 	rm -rf catalog attributes rmtest_1 rmtest_2 rmtest_3 rmtest_extra *.a *.o *~
 	$(MAKE) -C $(CODEROOT)/rbf clean
+
+test:
+	rm -rf catalog attributes index_table tbl_*
+	./rmtest_1
