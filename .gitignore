@@ -14,5 +14,6 @@ codebase/rm/librm.a
 ixtest1
 ixtest2
 ixtest3
-Age_idx
+*_idx
 sync.sh
+.idea/
