@@ -1,5 +1,6 @@
 
 #include "rm.h"
+#include "../ix/ix.h"
 #include <cassert>
 
 char const *catalog_attr_name[] = {"tableID", "tableName", "fileName"};
@@ -19,6 +20,9 @@ const int index_attr_len[] = {30,30,30};
 
 #define TABLE_EXIST_CHECK(x) \
 if (tbname_to_desp.find(x) == tbname_to_desp.end()) return -1;
+
+#define ixm (IndexManager::instance())
+
 
 
 RelationManager* RelationManager::_rm = 0;
@@ -180,10 +184,8 @@ RelationManager::~RelationManager()
 
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
-    if (tbname_to_desp.find(tableName) != tbname_to_desp.end()){
-        cout<<"this table exits"<<endl;
+    if (tbname_to_desp.find(tableName) != tbname_to_desp.end())
         return -1;
-    }
     char data[PAGE_SIZE];
     string tb_fn = RM_TABLE_FILENAME(tableName);
     RID rid;
@@ -201,7 +203,6 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 }
 
 
-//TODO: refectoring, using AttrValue to dump bytes
 RC RelationManager::deleteTable(const string &tableName)
 {
     TABLE_EXIST_CHECK(tableName);
@@ -209,22 +210,27 @@ RC RelationManager::deleteTable(const string &tableName)
     RID rid;
     RM_ScanIterator rsi;
     char data[PAGE_SIZE], value[100];
-    int len = (int)tableName.length();
-    vector<string> attrNames(1);
-    attrNames[0] = tableName;
-    memcpy(value, &len, sizeof(int));
-    memcpy(value + sizeof(int), tableName.c_str(), len);
-    assert(scan(RM_CATALOG_NAME, "tableName", EQ_OP, value, attrNames, rsi) != -1);
-
-    rsi.getNextTuple(rid, data);
-    deleteTuple(RM_CATALOG_NAME, rid);
-    attrNames[0] = "tableID";
+    
+    ValueStream(value)<<tableName;
+    assert(scan(RM_CATALOG_NAME, "tableName", EQ_OP, value, vector<string>(), rsi) != -1);
+    while (-1 != rsi.getNextTuple(rid, data))
+        deleteTuple(RM_CATALOG_NAME, rid);
     rsi.close();
-    scan(RM_ATTRIBUTES_NAME, "tableID", EQ_OP, &tbname_to_id[tableName], attrNames, rsi);
+    
+    assert(scan(RM_ATTRIBUTES_NAME, "tableID", EQ_OP, &tbname_to_id[tableName], vector<string>(), rsi) != -1);
     while (-1 != rsi.getNextTuple(rid, data))
         deleteTuple(RM_ATTRIBUTES_NAME, rid);
+    rsi.close();
+    
+    //delete associate indices
+    assert(scan(RM_INDEX_NAME, "tableName", EQ_OP, value, vector<string>(), rsi) != -1);
+    while (-1 != rsi.getNextTuple(rid, data))
+        deleteTuple(RM_INDEX_NAME, rid);
+    rsi.close();
+
     tbname_to_id.erase(tableName);
     tbname_to_desp.erase(tableName);
+    tbname_to_indices.erase(tableName);
     return 0;
 }
 
@@ -235,12 +241,33 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     return 0;
 }
 
+
+Attribute RelationManager::getAttribute(const string tb, const string attrname){
+    assert(tbname_to_desp.find(tb) != tbname_to_desp.end());
+    vector<Attribute> &entry = tbname_to_desp[tb];
+    for (vector<Attribute>::iterator itr = entry.begin(); itr != entry.end(); itr++)
+        if (itr->name == attrname)
+            return *itr;
+    return Attribute();
+}
+
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
-    return rbfm->insertRecord(fh, tbname_to_desp[tableName], data, rid);
+    if (rbfm->insertRecord(fh, tbname_to_desp[tableName], data, rid) == -1)
+        return -1;
+
+    //coordinate indices insertion
+    vector<Attribute> &desriptor = tbname_to_desp[tableName];
+    ValueStream vs((char *)data);
+    for (vector<Attribute>::iterator itr = desriptor.begin(); itr != desriptor.end(); itr++){
+        if (containIndex(tableName, itr->name))
+            insertIndexEntry(tableName, itr->name, vs.get_pointer(), rid);
+        vs.read(*itr);
+    }
+    return 0;
 }
 
 RC RelationManager::deleteTuples(const string &tableName)
@@ -248,15 +275,34 @@ RC RelationManager::deleteTuples(const string &tableName)
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
-    return rbfm->deleteRecords(fh);
+    assert(rbfm->deleteRecords(fh) == 0);
+    set<string> indices = tbname_to_indices[tableName];
+    for (set<string>::iterator itr = indices.begin(); itr != indices.end(); itr++){
+        assert(0 == destroyIndex(tableName, *itr));
+        assert(0 == createIndex(tableName, *itr));
+    }
+    return 0;
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
-    rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
-    return rbfm->deleteRecord(fh, tbname_to_desp[tableName], rid);
+    char data[PAGE_SIZE];
+    vector<Attribute> &descriptor = tbname_to_desp[tableName];
+    if (0 == readTuple(tableName, rid, data)){
+        ValueStream vs(data);
+        for (vector<Attribute>::iterator itr = descriptor.begin();
+             itr != descriptor.end(); itr++){
+            if (containIndex(tableName, itr->name))
+                deleteIndexEntry(tableName, itr->name, vs.get_pointer(), rid);
+            vs.read(*itr);
+        }
+    }
+    assert(rbfm->openFile(RM_TABLE_FILENAME(tableName), fh) == 0);
+    if (rbfm->deleteRecord(fh, tbname_to_desp[tableName], rid) == -1)
+        return -1;
+    return 0;
 }
 
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
@@ -304,10 +350,6 @@ RC RelationManager::scan(const string &tableName,
                          const vector<string> &attributeNames,
                          RM_ScanIterator &rm_ScanIterator)
 {
-    if (tbname_to_desp.find(tableName) == tbname_to_desp.end()){
-        cout<<tableName<< " not exits"<<endl;
-        return -1;
-    }
     TABLE_EXIST_CHECK(tableName);
     FileHandle fh;
     rbfm->openFile(RM_TABLE_FILENAME(tableName), fh);
@@ -338,6 +380,31 @@ RC RelationManager::reorganizeTable(const string &tableName)
 // Index Creation
 //========================
 
+
+bool RelationManager::containIndex(string tbn, string attr){
+//    assert(tbname_to_indices.find(tbn) != tbname_to_indices.end());
+    return tbname_to_indices[tbn].find(attr) != tbname_to_indices[tbn].end();
+}
+
+RC RelationManager::insertIndexEntry(string tbn, string attr, void *data, const RID &rid){
+    assert(containIndex(tbn, attr));
+    FileHandle ixfh;
+    assert(rbfm->openFile(RM_INDEX_FILENAME(tbn, attr), ixfh) == 0);
+    assert(ixm->insertEntry(ixfh, getAttribute(tbn, attr), data, rid) == 0);
+    return 0;
+}
+
+RC RelationManager::deleteIndexEntry(string tbn, string attr, void *data, const RID &rid){
+    assert(containIndex(tbn, attr));
+    FileHandle ixfh;
+    assert(rbfm->openFile(RM_INDEX_FILENAME(tbn, attr), ixfh) == 0);
+    assert(ixm->deleteEntry(ixfh, getAttribute(tbn, attr), data, rid) == 0);
+    return 0;
+}
+
+
+
+
 RC RelationManager::createIndex(const string &tableName, const string &attributeName){
     TABLE_EXIST_CHECK(tableName);
     set<string> &iset = tbname_to_indices[tableName];
@@ -345,13 +412,32 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
         return -1;
     char data[PAGE_SIZE];
     RID rid;
+    //insert into index_table
     prepareIndexData(tableName, attributeName, data);
-    return -1;
+    assert(insertTuple(RM_INDEX_NAME, data, rid) == 0);
+    iset.insert(attributeName);
+    
+    string ixfn = RM_INDEX_FILENAME(tableName, attributeName);
+    FileHandle ixfh;
+    ixm->createFile(ixfn);
+    ixm->openFile(ixfn, ixfh);
+    RM_ScanIterator rmsi;
+    assert(scan(tableName, "", NO_OP, NULL, vector<string>(1,attributeName), rmsi) == 0);
+    while (rmsi.getNextTuple(rid, data) != -1)
+        assert(ixm->insertEntry(ixfh, getAttribute(tableName, attributeName), data, rid) == 0);
+    rmsi.close();
+    return 0;
 }
 
 RC RelationManager::destroyIndex(const string &tableName, const string &attributeName){
     TABLE_EXIST_CHECK(tableName);
-    return -1;
+    if (!containIndex(tableName, attributeName))
+        return -1;
+    RID rid;
+    tbname_to_indices[tableName].erase(attributeName);
+    assert(0 == deleteTuple(RM_INDEX_NAME, rid));
+    assert(0 == ixm->destroyFile(RM_INDEX_FILENAME(tableName, attributeName)));
+    return 0;
 }
 
 // indexScan returns an iterator to allow the caller to go through qualified entries in index
@@ -363,9 +449,14 @@ RC RelationManager::indexScan(const string &tableName,
                               bool highKeyInclusive,
                               RM_IndexScanIterator &rm_IndexScanIterator){
     TABLE_EXIST_CHECK(tableName);
-    return -1;
+    FileHandle fh;
+    assert(rbfm->openFile(RM_INDEX_FILENAME(tableName, attributeName), fh) != -1);
+    return ixm->scan(fh, getAttribute(tableName, attributeName), lowKey, highKey,
+                     lowKeyInclusive, highKeyInclusive, rm_IndexScanIterator._ixsi);
 }
 
-
+RC RM_IndexScanIterator::getNextEntry(RID &rid, void *key){
+    return _ixsi.getNextEntry(rid, key);
+}
 
 

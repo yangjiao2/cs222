@@ -7,6 +7,7 @@
 #include <set>
 
 #include "../rbf/rbfm.h"
+#include "../ix/ix.h"
 
 
 
@@ -48,13 +49,19 @@ private:
 
 
 class RM_IndexScanIterator {
+    friend class RelationManager;
 public:
-    RM_IndexScanIterator() {};  	// Constructor
-    ~RM_IndexScanIterator() {}; 	// Destructor
+    RM_IndexScanIterator() {};
+    ~RM_IndexScanIterator() {
+        close();
+    };
     
-    // "key" follows the same format as in IndexManager::insertEntry()
-    RC getNextEntry(RID &rid, void *key) {return RM_EOF;};  	// Get next matching entry
-    RC close() {return -1;};             			// Terminate index scan
+    RC getNextEntry(RID &rid, void *key);
+    RC close(){
+        return _ixsi.close();
+    }
+private:
+    IX_ScanIterator _ixsi;
 };
 
 
@@ -119,6 +126,12 @@ private:
     int prepareIndexData(string tablename, string attribute, char *data);
     
     void RetrieveMetaInfo(void);
+    Attribute getAttribute(string tb, string attr);
+    
+    bool containIndex(string tbn, string attr);
+    RC insertIndexEntry(string tbn, string attr, void *data, const RID &rid);
+    RC deleteIndexEntry(string tbn, string attr, void *data, const RID &rid);
+
     
     
     

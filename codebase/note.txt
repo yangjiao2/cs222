@@ -1,7 +1,47 @@
+===========================
+Index Coordination:
+
+
+
+
+RM_IndexScanIterator
+
+
+
+
+
+
+
+==============================
+Done
+
+1) insertTuple, insert associated index
+
+2) deleteTuple, delete associated index
+
+3) deleteTuples, delete associated index
+
+4) deleteTable, destroy all associated index
+
+
+
+
+
+
+
+
+
 ============================
 Part 4.1
 
 1) for each table's index relationship, add a new table to store this. load info into map-based data structure.
+
+invanriance of index coordination:
+1) index_table
+2) in-memory tbname_to_indices[] map
+3) corresponding file exsitence, tablename.attr
+
+
 
 Part 4.2
 

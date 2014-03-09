@@ -6,6 +6,7 @@
 #include <vector>
 #include <sstream>
 #include <cstring>
+#include <cassert>
 
 #include "../rbf/pfm.h"
 
@@ -43,19 +44,19 @@ struct Attribute {
 
 // Comparison Operator (NOT needed for part 1 of the project)
 typedef enum { EQ_OP = 0,  // =
-               LT_OP,      // <
-               GT_OP,      // >
-               LE_OP,      // <=
-               GE_OP,      // >=
-               NE_OP,      // !=
-               NO_OP       // no condition
-             } CompOp;
+    LT_OP,      // <
+    GT_OP,      // >
+    LE_OP,      // <=
+    GE_OP,      // >=
+    NE_OP,      // !=
+    NO_OP       // no condition
+} CompOp;
 
 
 class AttrValue{
 public:
     AttrType _type;
-    int _len;
+    int _len; //lenght occupied in memory
     string _sv;
     int _iv;
     float _fv;
@@ -63,7 +64,7 @@ public:
     AttrValue(float v): _len(sizeof(float)), _sv(""), _iv(0), _fv(v) {}
     AttrValue(string v): _len(sizeof(int) + (int)v.length()), _sv(v), _iv(0), _fv(0) {}
     AttrValue(): _len(0), _sv(""), _iv(0), _fv(0){} //intialize to same value, only different field value matter
-//    AttrValue(const AttrValue &other) : _type(other._type), _len(other._len), _sv(other._sv), _iv(other._iv), _fv(other._fv) {cout<<"copy constructor called"<<endl;}
+    //    AttrValue(const AttrValue &other) : _type(other._type), _len(other._len), _sv(other._sv), _iv(other._iv), _fv(other._fv) {cout<<"copy constructor called"<<endl;}
     int readFromData(AttrType type, char *data); //return length of the content
     int writeToData(char *data); //return length of content
     static bool compareValue(AttrValue v, AttrValue cmp, CompOp op);
@@ -82,8 +83,8 @@ inline bool operator>=(const AttrValue& lhs, const AttrValue& rhs){return !opera
 
 
 /****************************************************************************
-The scan iterator is NOT required to be implemented for part 1 of the project
-*****************************************************************************/
+ The scan iterator is NOT required to be implemented for part 1 of the project
+ *****************************************************************************/
 
 # define RBFM_EOF (-1)  // end of a scan operator
 
@@ -104,7 +105,7 @@ class RBFM_ScanIterator {
 public:
     RBFM_ScanIterator() {}
     ~RBFM_ScanIterator() {}
-
+    
     // "data" follows the same format as RecordBasedFileManager::insertRecord()
     RC getNextRecord(RID &rid, void *data);
     RC close() {
@@ -130,43 +131,43 @@ public:
     static RecordBasedFileManager* instance();
     
     static int getAttrsLength(vector<Attribute> atrs);
-
+    
     RC createFile(const string &fileName);
-
+    
     RC destroyFile(const string &fileName);
-
+    
     RC openFile(const string &fileName, FileHandle &fileHandle);
-
+    
     RC closeFile(FileHandle &fileHandle);
-
+    
     //  Format of the data passed into the function is the following:
     //  1) data is a concatenation of values of the attributes
     //  2) For int and real: use 4 bytes to store the value;
     //     For varchar: use 4 bytes to store the length of characters, then store the actual characters.
     //  !!!The same format is used for updateRecord(), the returned data of readRecord(), and readAttribute()
     RC insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
-
+    
     RC readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
-
+    
     // This method will be mainly used for debugging/testing
     RC printRecord(const vector<Attribute> &recordDescriptor, const void *data);
-
+    
     /**************************************************************************************************************************************************************
-    ***************************************************************************************************************************************************************
-    IMPORTANT, PLEASE READ: All methods below this comment (other than the constructor and destructor) are NOT required to be implemented for part 1 of the project
-    ***************************************************************************************************************************************************************
-    ***************************************************************************************************************************************************************/
+     ***************************************************************************************************************************************************************
+     IMPORTANT, PLEASE READ: All methods below this comment (other than the constructor and destructor) are NOT required to be implemented for part 1 of the project
+     ***************************************************************************************************************************************************************
+     ***************************************************************************************************************************************************************/
     RC deleteRecords(FileHandle &fileHandle);
-
+    
     RC deleteRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid);
-
+    
     // Assume the rid does not change after update
     RC updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid);
-
+    
     RC readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string attributeName, void *data);
-
+    
     RC reorganizePage(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const unsigned pageNumber);
-
+    
     // scan returns an iterator to allow the caller to go through the results one by one.
     RC scan(FileHandle &fileHandle,
             const vector<Attribute> &recordDescriptor,
@@ -183,18 +184,18 @@ private:
     RC meetRequirement(string v, string cmp, CompOp op);
     RC meetRequirement(int v, int cmp, CompOp op);
     RC meetRequirement(float v, float cmp, CompOp op);
-
-
-// Extra credit for part 2 of the project, please ignore for part 1 of the project
+    
+    
+    // Extra credit for part 2 of the project, please ignore for part 1 of the project
 public:
-
+    
     RC reorganizeFile(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor);
-
-
+    
+    
 protected:
     RecordBasedFileManager();
     ~RecordBasedFileManager();
-
+    
 private:
     static RecordBasedFileManager *_rbf_manager;
 	PagedFileManager *pfm;
@@ -207,12 +208,12 @@ public:
     ~ValueStream(){
     }
     ValueStream& operator<<(int v){
-        memcpy(get_pos(), &v, sizeof(int));
+        memcpy(get_pointer(), &v, sizeof(int));
         _offset += sizeof(int);
         return *this;
     }
     ValueStream& operator<<(float v){
-        memcpy(get_pos(), &v, sizeof(float));
+        memcpy(get_pointer(), &v, sizeof(float));
         _offset += sizeof(float);
         return *this;
     }
@@ -222,20 +223,20 @@ public:
     ValueStream& operator<<(string s){
         int len = (int)s.length();
         (*this)<<len;
-        memcpy(get_pos(), s.c_str(), len);
+        memcpy(get_pointer(), s.c_str(), len);
         _offset += len;
         return *this;
     }
     ValueStream& operator>>(int &v){
         int tmp;
-        memcpy(&tmp, get_pos(), sizeof(int));
+        memcpy(&tmp, get_pointer(), sizeof(int));
         v = tmp;
         _offset += sizeof(int);
         return *this;
     }
     ValueStream& operator>>(float &v){
         float tmp;
-        memcpy(&tmp, get_pos(), sizeof(int));
+        memcpy(&tmp, get_pointer(), sizeof(int));
         v = tmp;
         _offset += sizeof(float);
         return *this;
@@ -244,22 +245,40 @@ public:
         int len;
         (*this)>>len;
         char str[4096] = {'\0'};
-        memcpy(str, get_pos(), len);
+        memcpy(str, get_pointer(), len);
         s = string(str);
         _offset += len;
         return *this;
     }
+    
+    AttrValue read(Attribute &attr){
+        int v;
+        float f;
+        string s;
+        switch (attr.type) {
+            case TypeInt:
+                *this>>v;
+                return AttrValue(v);
+            case TypeReal:
+                *this>>f;
+                return AttrValue(f);
+            case TypeVarChar:
+                *this>>s;
+                return AttrValue(s);
+            default:
+                assert(false); //should not reach here
+                return AttrValue();
+        }
+    }
+    
     ValueStream& set_offset(int off){
         _offset = off;
         return *this;
     }
     char *get_pointer(){
-        return _data;
-    }
-private:
-    char *get_pos(){
         return _data + _offset;
     }
+private:
     char *_data;
     int _offset;
 };

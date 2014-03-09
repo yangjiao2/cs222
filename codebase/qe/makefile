@@ -32,3 +32,7 @@ clean:
 	-rm qetest *.a *.o *~
 	$(MAKE) -C $(CODEROOT)/rm clean
 	$(MAKE) -C $(CODEROOT)/ix clean 
+
+test:
+	rm -rf attributes catalog index_table left* right* group
+	./qetest
