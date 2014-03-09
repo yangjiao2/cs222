@@ -678,6 +678,7 @@ int testCase_6() {
 	}
     
 	if (expectedResultCnt != actualResultCnt) {
+        cout<<"expectedCnt: "<<expectedResultCnt<<" actualCnt: "<<actualResultCnt<<endl;
 		rc = fail;
 	}
     

@@ -39,7 +39,9 @@ $(CODEROOT)/ix/libix.a:
 clean:
 	rm -rf catalog attributes rmtest_1 rmtest_2 rmtest_3 rmtest_extra *.a *.o *~
 	$(MAKE) -C $(CODEROOT)/rbf clean
+cleanup:
+	rm -rf catalog attributes index_table tbl_*
 
 test:
-	rm -rf catalog attributes index_table tbl_*
+	make cleanup
 	./rmtest_1

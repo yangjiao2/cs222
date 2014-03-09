@@ -27,12 +27,15 @@ $(CODEROOT)/rm/librm.a:
 $(CODEROOT)/ix/libix.a:
 	$(MAKE) -C $(CODEROOT)/ix libix.a
 
-.PHONY: clean
+.PHONY: clean cleanup
 clean:
 	-rm qetest *.a *.o *~
 	$(MAKE) -C $(CODEROOT)/rm clean
 	$(MAKE) -C $(CODEROOT)/ix clean 
 
-test:
+cleanup:
 	rm -rf attributes catalog index_table left* right* group
+
+test:
+	make cleanup
 	./qetest

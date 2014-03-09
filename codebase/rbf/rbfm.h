@@ -60,11 +60,10 @@ public:
     string _sv;
     int _iv;
     float _fv;
-    AttrValue(int v): _len(sizeof(int)), _sv(""), _iv(v), _fv(0) {}
-    AttrValue(float v): _len(sizeof(float)), _sv(""), _iv(0), _fv(v) {}
-    AttrValue(string v): _len(sizeof(int) + (int)v.length()), _sv(v), _iv(0), _fv(0) {}
+    AttrValue(int v): _type(TypeInt), _len(sizeof(int)), _sv(""), _iv(v), _fv(0) {}
+    AttrValue(float v): _type(TypeReal), _len(sizeof(float)), _sv(""), _iv(0), _fv(v)  {}
+    AttrValue(string v): _type(TypeVarChar), _len(sizeof(int) + (int)v.length()), _sv(v), _iv(0), _fv(0)  {}
     AttrValue(): _len(0), _sv(""), _iv(0), _fv(0){} //intialize to same value, only different field value matter
-    //    AttrValue(const AttrValue &other) : _type(other._type), _len(other._len), _sv(other._sv), _iv(other._iv), _fv(other._fv) {cout<<"copy constructor called"<<endl;}
     int readFromData(AttrType type, char *data); //return length of the content
     int writeToData(char *data); //return length of content
     static bool compareValue(AttrValue v, AttrValue cmp, CompOp op);
@@ -204,7 +203,7 @@ private:
 
 class ValueStream{
 public:
-    ValueStream(char *data = NULL): _data(data), _offset(0){}
+    ValueStream(void *data = NULL): _data((char *)data), _offset(0){}
     ~ValueStream(){
     }
     ValueStream& operator<<(int v){
@@ -244,18 +243,22 @@ public:
     ValueStream& operator>>(string &s){
         int len;
         (*this)>>len;
-        char str[4096] = {'\0'};
+        char str[100] = {'\0'};
         memcpy(str, get_pointer(), len);
         s = string(str);
         _offset += len;
         return *this;
     }
     
-    AttrValue read(Attribute &attr){
+    AttrValue read(const Attribute &attr){
+        return read(attr.type);
+    }
+    
+    AttrValue read(AttrType type){
         int v;
         float f;
         string s;
-        switch (attr.type) {
+        switch (type) {
             case TypeInt:
                 *this>>v;
                 return AttrValue(v);
@@ -269,6 +272,33 @@ public:
                 assert(false); //should not reach here
                 return AttrValue();
         }
+    }
+    
+    ValueStream& write(const AttrValue av){
+        switch (av._type) {
+            case TypeInt:
+                *this<<av._iv;
+                break;
+            case TypeReal:
+                *this<<av._fv;
+                break;
+            case TypeVarChar:
+                *this<<av._sv;
+                break;
+            default:
+                assert(false);
+                break;
+        }
+        return *this;
+    }
+    
+    bool search(const vector<Attribute> &attrs, const string name, AttrValue &av){
+        for (int i = 0; i < (int)attrs.size(); read(attrs[i]), i++)
+            if (attrs[i].name == name){
+                av = read(attrs[i]);
+                return true;
+            }
+        return false;
     }
     
     ValueStream& set_offset(int off){

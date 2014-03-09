@@ -39,8 +39,11 @@ class Iterator {
     // All the relational operators and access methods are iterators.
 public:
     virtual RC getNextTuple(void *data) = 0;
+    //all getAttributes() returning attrs's name containg relation.attr
     virtual void getAttributes(vector<Attribute> &attrs) const = 0;
     virtual ~Iterator() {};
+protected:
+    string get_tbname();
 };
 
 
@@ -197,25 +200,30 @@ class Filter : public Iterator {
 public:
     Filter(Iterator *input,                         // Iterator of input R
            const Condition &condition               // Selection condition
-    );
+    ) : _iterator(input), _cond(condition) {} ;
     ~Filter(){};
     
     RC getNextTuple(void *data);
     // For attribute in vector<Attribute>, name it as rel.attr
-    void getAttributes(vector<Attribute> &attrs) const{};
+    void getAttributes(vector<Attribute> &attrs) const;
+private:
+    Iterator* _iterator;
+    Condition _cond;
 };
 
 
 class Project : public Iterator {
     // Projection operator
 public:
-    Project(Iterator *input,                            // Iterator of input R
-            const vector<string> &attrNames){};           // vector containing attribute names
+    Project(Iterator *input, const vector<string> &attrNames) : _iteratr(input), _projected(attrNames){}
     ~Project(){};
     
-    RC getNextTuple(void *data) {return QE_EOF;};
+    RC getNextTuple(void *data);
     // For attribute in vector<Attribute>, name it as rel.attr
-    void getAttributes(vector<Attribute> &attrs) const{};
+    void getAttributes(vector<Attribute> &attrs) const;
+private:
+    Iterator* _iteratr;
+    vector<string> _projected; //projected is also relation.attr schema
 };
 
 
@@ -226,12 +234,25 @@ public:
            TableScan *rightIn,                           // TableScan Iterator of input S
            const Condition &condition,                   // Join condition
            const unsigned numPages                       // Number of pages can be used to do join (decided by the optimizer)
-    ){};
-    ~NLJoin(){};
+    ): _left(leftIn), _right(rightIn), _cond(condition), _numPages(numPages){
+//        _buff = new char[_numPages * PAGE_SIZE];
+    };
+    ~NLJoin(){
+//        delete _buff;
+    };
     
-    RC getNextTuple(void *data){return QE_EOF;};
+    RC getNextTuple(void *data);
     // For attribute in vector<Attribute>, name it as rel.attr
-    void getAttributes(vector<Attribute> &attrs) const{};
+    void getAttributes(vector<Attribute> &attrs) const;
+private:
+    Iterator* _left;
+    TableScan* _right;
+    Condition _cond;
+    unsigned _numPages;
+    AttrValue _outer;
+    char lbuf[PAGE_SIZE];
+    char rbuf[PAGE_SIZE];
+//    char* _buff;
 };
 
 
@@ -242,13 +263,23 @@ public:
             IndexScan *rightIn,                             // IndexScan Iterator of input S
             const Condition &condition,                     // Join condition
             const unsigned numPages                         // Number of pages can be used to do join (decided by the optimizer)
-    ){};
+    ) : _left(leftIn), _right(rightIn), _cond(condition), _numPages(numPages)
+    {}
     
     ~INLJoin(){};
     
-    RC getNextTuple(void *data){return QE_EOF;};
+    RC getNextTuple(void *data);
     // For attribute in vector<Attribute>, name it as rel.attr
-    void getAttributes(vector<Attribute> &attrs) const{};
+    void getAttributes(vector<Attribute> &attrs) const;
+
+private:
+    Iterator* _left;
+    IndexScan* _right;
+    Condition _cond;
+    unsigned _numPages;
+    AttrValue _outer;
+    char lbuf[PAGE_SIZE];
+    char rbuf[PAGE_SIZE];
 };
 
 

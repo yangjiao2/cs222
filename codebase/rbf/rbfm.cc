@@ -11,7 +11,7 @@ int AttrValue::readFromData(AttrType type, char *data){
     switch (_type) {
         case TypeVarChar:
             memcpy(&len, data, sizeof(int));
-            memcpy(s, data + sizeof(int), len);
+            memcpy(s, (char *)data + sizeof(int), len);
             s[len] = '\0';
             _sv = string(s);
             _len = sizeof(int) + len;
@@ -36,7 +36,7 @@ int AttrValue::writeToData(char *data){
         case TypeVarChar:
             len = _len - 4;
             memcpy(data, &len, sizeof(int));
-            memcpy(data + sizeof(int), _sv.c_str(), _sv.length());
+            memcpy((char *)data + sizeof(int), _sv.c_str(), _sv.length());
             return _len;
         case TypeInt:
             memcpy(data, &_iv, 4);
@@ -330,16 +330,11 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
                                          const RID &rid, const string attributeName, void *data){
     char buffer[PAGE_SIZE];
     readRecord(fileHandle, recordDescriptor, rid, buffer);
-    int offset = 0;
     AttrValue av;
-    for (int i = 0; i < recordDescriptor.size(); i++) {
-        offset += av.readFromData(recordDescriptor[i].type, buffer + offset);
-        if (recordDescriptor[i].name == attributeName) {
-            av.writeToData((char *)data);
-            return 0;
-        }
-    }
-    return -1;
+    if (!ValueStream(buffer).search(recordDescriptor, attributeName, av))
+        return -1;
+    av.writeToData((char *)data);
+    return 0;
 }
 
 RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<Attribute>
