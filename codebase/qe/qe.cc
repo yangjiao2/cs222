@@ -1,23 +1,19 @@
 
 #include "qe.h"
 #include "../rbf/rbfm.h"
+#include <cfloat>
 
 #define rm (RelationManager::instance())
 
 #define SCHEME_NAME(x,y) string(x+"."+y)
 
+static const char * aggOpName[] = {"MIN", "MAX", "SUM", "AVG", "COUNT"};
+
 static AttrValue convert(Value v){
     return ValueStream((char*)v.data).read(v.type);
 }
 
-//return table_name, attribute_name
-static pair<string, string> split_condition(string s){
-    int pos = (int)s.find('.');
-    return make_pair(s.substr(0, pos), s.substr(pos+1));
-}
 
-#define QE_TBNAME(s) (split_condition(s).first)
-#define QE_ATNAME(s) (split_condition(s).second)
 
 void Filter::getAttributes(vector<Attribute> &attrs) const{
     _iterator->getAttributes(attrs);
@@ -74,7 +70,7 @@ void NLJoin::getAttributes(vector<Attribute> &attrs) const{
 
 
 static void output(void *lbuf, vector<Attribute> &lAttrs,
-                    void *rbuf, vector<Attribute> &rAttrs, void *data){
+                   void *rbuf, vector<Attribute> &rAttrs, void *data){
     ValueStream output(data);
     AttrValue ov;
     for (int i = 0; i < (int)lAttrs.size(); i++){
@@ -154,9 +150,110 @@ RC INLJoin::getNextTuple(void *data){
 }
 
 
+void Aggregate::getAttributes(vector<Attribute> &attrs) const{
+    attrs.clear();
+    if (isGroupBy())
+        attrs.push_back(_gAttr);
+    attrs.push_back(_aggAttr);
+    attrs[1].name = string(aggOpName[_op]) + "(" + attrs[1].name + ")";
+}
 
+void Aggregate::accumulate(AttrValue &add, AttrValue &acc, AttrValue &count){
+    //intialize
+    if (acc._len == 0){
+        acc._len = count._len = 4;
+        acc._type = _aggAttr.type;
+        count._type = TypeInt;
+        if (acc._type == TypeInt && _op == MIN)
+            acc._iv = INT_MAX;
+        if (acc._type == TypeInt && _op == MAX)
+            acc._iv = INT_MIN;
+        if (acc._type == TypeReal && _op == MIN)
+            acc._fv = FLT_MAX;
+        if (acc._type == TypeInt && _op == MAX)
+            acc._fv = FLT_MIN;
+    }
+    switch (_op) {
+        case MIN:
+            acc = min(acc, add);
+            break;
+        case MAX:
+            acc = max(acc, add);
+            break;
+        case COUNT:
+        case AVG:
+        case SUM:
+            count._iv++;
+            acc._iv += add._iv;
+            acc._fv += acc._fv;
+            break;
+    }
+}
 
+void Aggregate::finalize(AttrValue &acc, AttrValue &count){
+    switch (_op) {
+        case COUNT:
+            acc = count;
+            break;
+        case AVG:
+            if (acc._type == TypeInt){
+                acc._type = TypeReal;
+                acc._fv = (float)acc._iv / (float)count._iv;
+            }
+            else
+                acc._fv = acc._fv / (float) count._iv;
+        default:
+            return;
+    }
+}
 
+void Aggregate::processAll(){
+    vector<Attribute> attrs;
+    _iterator->getAttributes(attrs);
+    AttrValue av, gv;
+    while (_iterator->getNextTuple(buff) != QE_EOF) {
+        ValueStream(buff).search(attrs, _aggAttr.name, av);
+        if (isGroupBy()){
+            ValueStream(buff).search(attrs, _gAttr.name, gv);
+            accumulate(av, _accMap[gv], _countMap[gv]);
+        }
+        else
+            accumulate(av, _acc, _count);
+    }
+    if (isGroupBy()){
+        for (map<AttrValue, AttrValue>::iterator itr = _accMap.begin();
+             itr != _accMap.end(); itr++)
+            finalize(itr->second, _countMap[itr->first]);
+    }
+    else
+        finalize(_acc, _count);
+}
+
+RC Aggregate::getNextTuple(void *data){
+    ValueStream output(data);
+    if (_last._len == 0){
+        if (isGroupBy()){
+            _last = (_accMap.begin())->first;
+            output.write(_last);
+            output.write((_accMap.begin())->second);
+        }
+        else{
+            _last = _acc;
+            output.write(_acc);
+        }
+        return 0;
+    }
+    if (isGroupBy()){
+        map<AttrValue, AttrValue>::iterator itr = _accMap.find(_last);
+        if (++itr == _accMap.end())
+            return QE_EOF;
+        _last = itr->first;
+        output.write(_last);
+        output.write(itr->second);
+        return 0;
+    }
+    return QE_EOF;
+}
 
 
 

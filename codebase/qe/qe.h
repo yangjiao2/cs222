@@ -289,22 +289,44 @@ public:
     Aggregate(Iterator *input,                              // Iterator of input R
               Attribute aggAttr,                            // The attribute over which we are computing an aggregate
               AggregateOp op                                // Aggregate operation
-    ){};
+    ) : _iterator(input), _aggAttr(aggAttr), _op(op)
+    {processAll();};
     
     // Extra Credit
     Aggregate(Iterator *input,                              // Iterator of input R
               Attribute aggAttr,                            // The attribute over which we are computing an aggregate
               Attribute gAttr,                              // The attribute over which we are grouping the tuples
               AggregateOp op                                // Aggregate operation
-    ){};
+    ) : _iterator(input), _aggAttr(aggAttr), _gAttr(gAttr), _op(op)
+    {processAll();};
     
     ~Aggregate(){};
     
-    RC getNextTuple(void *data){return QE_EOF;};
+    RC getNextTuple(void *data);
     // Please name the output attribute as aggregateOp(aggAttr)
     // E.g. Relation=rel, attribute=attr, aggregateOp=MAX
     // output attrname = "MAX(rel.attr)"
-    void getAttributes(vector<Attribute> &attrs) const{};
+    void getAttributes(vector<Attribute> &attrs) const;
+
+private:
+    bool isGroupBy() const{
+        return _gAttr.length != 0;
+    }
+    void processAll();
+    void accumulate(AttrValue &add, AttrValue &acc, AttrValue &count);
+    void finalize(AttrValue &acc, AttrValue &count);
+    
+private:
+    Iterator* _iterator;
+    Attribute _aggAttr;
+    Attribute _gAttr;
+    AggregateOp _op;
+    AttrValue _acc;
+    AttrValue _count;
+    map<AttrValue, AttrValue> _accMap;
+    map<AttrValue, AttrValue> _countMap;
+    AttrValue _last;
+    char buff[PAGE_SIZE];
 };
 
 #endif

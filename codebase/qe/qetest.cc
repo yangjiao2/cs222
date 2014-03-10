@@ -1233,39 +1233,41 @@ int testCase_12() {
     
 	// Go over the data through iterator
 	void *data = malloc(bufSize);
+    int cc = 0;
 	while (nlJoin->getNextTuple(data) != QE_EOF) {
 		int offset = 0;
-        
+        if (++cc % 1000 == 0)
+            cout<<cc<<" tuples joint"<<endl;
 		// Print leftvarchar.A
-		cout << "leftvarchar.A " << *(int *) ((char *) data + offset) << endl;
-		offset += sizeof(int);
-        
-		// Print leftvarchar.B
-		int length = *(int *) ((char *) data + offset);
-		offset += 4;
-		cout << "leftvarchar.B.length " << length << endl;
-        
-		char *b = (char *) malloc(100);
-		memcpy(b, (char *) data + offset, length);
-		b[length] = '\0';
-		offset += length;
-		cout << "leftvarchar.B " << b << endl;
-        
-		// Print rightvarchar.B
-		length = *(int *) ((char *) data + offset);
-		offset += 4;
-		cout << "rightvarchar.B.length " << length << endl;
-        
-		b = (char *) malloc(100);
-		memcpy(b, (char *) data + offset, length);
-		b[length] = '\0';
-		offset += length;
-		cout << "rightvarchar.B " << b << endl;
-        
-		// Print rightvarchar.B
-		cout << "rightvarchar.C " << *(float *) ((char *) data + offset)
-        << endl;
-		offset += sizeof(float);
+//		cout << "leftvarchar.A " << *(int *) ((char *) data + offset) << endl;
+//		offset += sizeof(int);
+//        
+//		// Print leftvarchar.B
+//		int length = *(int *) ((char *) data + offset);
+//		offset += 4;
+//		cout << "leftvarchar.B.length " << length << endl;
+//        
+//		char *b = (char *) malloc(100);
+//		memcpy(b, (char *) data + offset, length);
+//		b[length] = '\0';
+//		offset += length;
+//		cout << "leftvarchar.B " << b << endl;
+//        
+//		// Print rightvarchar.B
+//		length = *(int *) ((char *) data + offset);
+//		offset += 4;
+//		cout << "rightvarchar.B.length " << length << endl;
+//        
+//		b = (char *) malloc(100);
+//		memcpy(b, (char *) data + offset, length);
+//		b[length] = '\0';
+//		offset += length;
+//		cout << "rightvarchar.B " << b << endl;
+//        
+//		// Print rightvarchar.B
+//		cout << "rightvarchar.C " << *(float *) ((char *) data + offset)
+//        << endl;
+//		offset += sizeof(float);
         
 		memset(data, 0, bufSize);
 		++actualResultCnt;

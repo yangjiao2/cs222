@@ -67,7 +67,7 @@ public:
     int readFromData(AttrType type, char *data); //return length of the content
     int writeToData(char *data); //return length of content
     static bool compareValue(AttrValue v, AttrValue cmp, CompOp op);
-    void printSelf(void);
+    void printSelf(void) const;
 };
 
 inline bool operator==(const AttrValue& lhs, const AttrValue& rhs){

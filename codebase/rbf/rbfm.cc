@@ -49,7 +49,7 @@ int AttrValue::writeToData(char *data){
     }
 }
 
-void AttrValue::printSelf(){
+void AttrValue::printSelf() const{
     switch (_type) {
         case TypeInt:
             cout<<"Int "<<_iv;
